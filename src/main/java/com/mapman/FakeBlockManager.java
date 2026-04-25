@@ -238,11 +238,11 @@ public final class FakeBlockManager {
             return Collections.emptySet();
         }
 
-        // 快速检测：Chunk 是否在 region 的水平投影内
-        int chunkWorldX = chunk.getX() << 4;     // chunkX * 16
+        // AABB 重叠检测：Chunk 的方块包围盒与 Region 是否有交集
+        int chunkWorldX = chunk.getX() << 4;
         int chunkWorldZ = chunk.getZ() << 4;
-        if (!region.containsHorizontal(chunkWorldX + 8, chunkWorldZ + 8)) {
-            // Chunk 中心不在 region 水平投影内 —— 跳过整个 Chunk
+        if (chunkWorldX + 15 < region.minX() || chunkWorldX > region.maxX()
+                || chunkWorldZ + 15 < region.minZ() || chunkWorldZ > region.maxZ()) {
             return Collections.emptySet();
         }
 
@@ -284,6 +284,12 @@ public final class FakeBlockManager {
             }
         }
 
+        if (result.isEmpty()) {
+            return result;
+        }
+
+        plugin.getLogger().info("Chunk(" + chunk.getX() + "," + chunk.getZ()
+                + ") 扫描到 " + result.size() + " 个表面水方块");
         return result;
     }
 
@@ -327,5 +333,10 @@ public final class FakeBlockManager {
     /** 获取 waterCache 的大小（调试用） */
     public int cachedChunksCount() {
         return waterCache.size();
+    }
+
+    /** 获取所有缓存的表面水坐标总数（调试用） */
+    public int totalWaterPositions() {
+        return waterCache.values().stream().mapToInt(Set::size).sum();
     }
 }

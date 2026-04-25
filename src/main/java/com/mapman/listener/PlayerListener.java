@@ -73,10 +73,11 @@ public final class PlayerListener implements Listener {
     }
 
     /**
-     * 保护区域：禁止玩家在区域内破坏方块。
+     * 保护区域：禁止玩家在区域内破坏方块（有 mapman.build 权限的除外）。
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
+        if (event.getPlayer().hasPermission("mapman.build")) return;
         if (plugin.getRegion() == null) return;
         org.bukkit.block.Block block = event.getBlock();
         if (plugin.getRegion().contains(

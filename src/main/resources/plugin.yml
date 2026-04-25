@@ -14,3 +14,6 @@ permissions:
   mapman.weather:
     description: 允许使用 /weather 指令
     default: true
+  mapman.build:
+    description: 允许在保护区域内破坏/放置方块
+    default: op
