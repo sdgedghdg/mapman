@@ -3,6 +3,7 @@ package com.mapman;
 import com.mapman.command.WeatherCommand;
 import com.mapman.listener.PlayerListener;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 
