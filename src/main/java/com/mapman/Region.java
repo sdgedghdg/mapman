@@ -50,11 +50,9 @@ public final class Region {
             && z >= minZ && z <= maxZ;
     }
 
-    public int minY() {
-        return Math.max(minY, -64);
-    }
-
-    public int maxY() {
-        return Math.min(maxY, 320);
-    }
+    public int minX() { return minX; }
+    public int maxX() { return maxX; }
+    public int minZ() { return minZ; }
+    public int minY() { return Math.max(minY, -64); }
+    public int maxY() { return Math.min(maxY, 320); }
 }
