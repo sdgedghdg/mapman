@@ -53,6 +53,7 @@ public final class Region {
     public int minX() { return minX; }
     public int maxX() { return maxX; }
     public int minZ() { return minZ; }
+    public int maxZ() { return maxZ; }
     public int minY() { return Math.max(minY, -64); }
     public int maxY() { return Math.min(maxY, 320); }
 }
