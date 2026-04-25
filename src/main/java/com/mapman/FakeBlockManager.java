@@ -94,6 +94,8 @@ public final class FakeBlockManager {
      * 仅在跨 Chunk 时计算增量可见 Chunk，并为其入队假方块发送。
      */
     public void onPlayerMove(Player player, Location from, Location to) {
+        // 只处理目标世界
+        if (!player.getWorld().equals(targetWorld)) return;
         WeatherType weather = plugin.getWeatherManager().getPlayerWeather(player);
         if (weather != WeatherType.SNOW) return;
 
@@ -120,11 +122,10 @@ public final class FakeBlockManager {
      */
     public void onChunkLoad(int chunkX, int chunkZ) {
         ChunkCoord coord = new ChunkCoord(chunkX, chunkZ);
-        // 快速路径：如果 waterCache 都没这个 chunk，直接跳过
-        if (!waterCache.containsKey(coord)) return;
 
         int viewDist = plugin.getViewDistance();
         for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!player.getWorld().equals(targetWorld)) continue;
             if (plugin.getWeatherManager().getPlayerWeather(player) != WeatherType.SNOW) continue;
             ChunkCoord pc = ChunkCoord.fromLocation(player.getLocation());
             if (Math.abs(pc.x() - chunkX) <= viewDist && Math.abs(pc.z() - chunkZ) <= viewDist) {
@@ -145,6 +146,7 @@ public final class FakeBlockManager {
 
     /** 为玩家应用 SNOW 假方块：扫描视野内所有 chunk，入队发送 */
     private void applyFakeBlocks(Player player) {
+        if (!player.getWorld().equals(targetWorld)) return;
         // 清空旧缓存 —— 撤销交给 undoFakeBlocks 或者在切换前由调用方先调 undo
         plugin.getFakeBlockCache().removeAll(player.getUniqueId());
 
@@ -181,11 +183,16 @@ public final class FakeBlockManager {
 
     /**
      * 从全局缓存中读取某 Chunk 的表面水坐标，
+     * 缓存未命中时懒加载扫描该 Chunk。
      * 检查玩家缓存（避免重复发送）后，入队发送。
      */
     private void enqueueChunkFakeBlocks(Player player, ChunkCoord coord) {
-        Set<BlockPosition> waterPositions = waterCache.get(coord);
-        if (waterPositions == null || waterPositions.isEmpty()) return;
+        // 懒加载：未缓存时实时扫描并写入全局缓存
+        Set<BlockPosition> waterPositions = waterCache.computeIfAbsent(coord, k -> {
+            if (!player.getWorld().equals(targetWorld)) return Collections.emptySet();
+            return scanChunk(player.getWorld().getChunkAt(coord.x(), coord.z()));
+        });
+        if (waterPositions.isEmpty()) return;
 
         FakeBlockCache cache = plugin.getFakeBlockCache();
         UUID pid = player.getUniqueId();
@@ -217,12 +224,6 @@ public final class FakeBlockManager {
     public void preCacheChunk(Chunk chunk) {
         ChunkCoord coord = new ChunkCoord(chunk.getX(), chunk.getZ());
         waterCache.computeIfAbsent(coord, k -> scanChunk(chunk));
-    }
-
-    /** 懒扫描：当玩家首次需要某 Chunk 数据时触发 */
-    private Set<BlockPosition> getOrCacheChunk(Chunk chunk) {
-        ChunkCoord coord = new ChunkCoord(chunk.getX(), chunk.getZ());
-        return waterCache.computeIfAbsent(coord, k -> scanChunk(chunk));
     }
 
     /**
