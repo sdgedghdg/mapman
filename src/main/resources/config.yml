@@ -1,0 +1,36 @@
+# ============================================================
+# MapMan 配置文件
+# ============================================================
+
+# 区域设置：只在该区域内进行方块伪装
+region:
+  # 目标世界名称
+  world: "world"
+  # 区域角点 A（方块坐标）
+  pos1:
+    x: -100
+    y: -64
+    z: -100
+  # 区域角点 B（方块坐标）
+  pos2:
+    x: 100
+    y: 320
+    z: 100
+
+# 性能设置
+performance:
+  # 玩家视距（chunk 数量），建议 3~5
+  view-distance: 3
+  # 每 tick 发送的方块变化上限
+  max-per-tick: 200
+
+# 表面水伪装配置
+surface-water:
+  # 替换为哪种方块，默认 PACKED_ICE
+  replace-with: PACKED_ICE
+
+# 玩家默认天气
+weather-default: CLEAR
+
+# 玩家数据保存间隔（tick）
+save-interval: 1200

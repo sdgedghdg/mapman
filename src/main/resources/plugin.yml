@@ -1,0 +1,16 @@
+name: MapMan
+version: 1.0.0
+main: com.mapman.MapMan
+api-version: 1.21
+folia-supported: false
+
+commands:
+  weather:
+    description: 设置个人天气视觉
+    usage: /weather set <clear|rain|snow>
+    permission: mapman.weather
+
+permissions:
+  mapman.weather:
+    description: 允许使用 /weather 指令
+    default: true
