@@ -3,8 +3,14 @@ version: 1.0.0
 main: com.mapman.MapMan
 api-version: 1.21
 folia-supported: false
+depend:
+  - CraftEngine
 
 commands:
+  mapman:
+    description: MapMan 管理指令
+    usage: /mapman <reload|info|apply|undo>
+    permission: mapman.admin
   weather:
     description: 设置个人天气视觉
     usage: /weather set <clear|rain|snow>
@@ -16,4 +22,7 @@ permissions:
     default: true
   mapman.build:
     description: 允许在保护区域内破坏/放置方块
+    default: op
+  mapman.admin:
+    description: 允许使用 /mapman 管理指令
     default: op

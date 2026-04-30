@@ -1,0 +1,55 @@
+# ============================================================
+# MapMan 条件驱动方块替换规则
+# ============================================================
+#
+# 每条规则包含：
+#   priority    — 优先级（越高越优先）
+#   conditions  — CraftEngine 条件（参考 CE 文档）
+#   changes     — target:replace 映射
+#
+# target/replace 支持格式：
+#   minecraft:water     — 原版方块
+#   default:topaz_ore   — CraftEngine 自定义方块
+#
+# 示例规则：
+#
+# rules:
+#   winter_freeze:
+#     priority: 100
+#     conditions:
+#       - type: expression
+#         expression: "<papi:season> == winter"
+#     changes:
+#       minecraft:water: minecraft:packed_ice
+#       minecraft:grass_block: minecraft:snow_block
+#
+#   snow_weather:
+#     priority: 50
+#     conditions:
+#       - type: expression
+#         expression: "<papi:storm>"
+#     changes:
+#       minecraft:water: minecraft:ice
+
+rules:
+  # 冬季河面结冰
+  winter_freeze:
+    priority: 100
+    conditions:
+      - type: any_of
+        terms:
+          - type: expression
+            expression: "<papi:season> == winter"
+          - type: expression
+            expression: "<papi:weather> == thunder"
+    changes:
+      minecraft:water: minecraft:packed_ice
+
+  # 下雪天气水面结冰
+  snow_weather:
+    priority: 50
+    conditions:
+      - type: expression
+        expression: "<papi:storm>"
+    changes:
+      minecraft:water: minecraft:ice

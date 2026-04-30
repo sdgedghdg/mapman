@@ -78,18 +78,13 @@ public final class WeatherManager {
         playerWeather.put(uuid, type);
         dirty = true;
 
-        // 同步到玩家客户端
+        // 同步到玩家客户端（仅视觉效果）
         switch (type) {
-            case CLEAR -> {
-                player.resetPlayerWeather();
-                // 无假方块需要撤销 —— 由调用方 FakeBlockManager 处理
-            }
-            case RAIN -> player.setPlayerWeather(org.bukkit.WeatherType.DOWNFALL);
-            case SNOW -> player.setPlayerWeather(org.bukkit.WeatherType.DOWNFALL);
+            case CLEAR -> player.resetPlayerWeather();
+            case RAIN, SNOW -> player.setPlayerWeather(org.bukkit.WeatherType.DOWNFALL);
         }
 
-        // 通知 FakeBlockManager 更新假方块
-        plugin.getFakeBlockManager().onWeatherChange(player, type);
+        // 方块替换现在由 rules.yml 条件系统驱动，不再在此处直接触发
     }
 
     /** 玩家退出时同步保存该玩家数据 */

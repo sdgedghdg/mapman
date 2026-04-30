@@ -23,11 +23,8 @@ performance:
   view-distance: 3
   # 每 tick 发送的方块变化上限
   max-per-tick: 200
-
-# 表面水伪装配置
-surface-water:
-  # 替换为哪种方块，默认 PACKED_ICE
-  replace-with: PACKED_ICE
+  # 条件重新评估间隔（tick），20 = 1秒
+  re-eval-interval: 100
 
 # 玩家默认天气
 weather-default: CLEAR

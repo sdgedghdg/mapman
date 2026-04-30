@@ -1,42 +1,40 @@
 package com.mapman;
 
+import com.mapman.command.MapManCommand;
 import com.mapman.command.WeatherCommand;
+import com.mapman.engine.BlockApplier;
+import com.mapman.engine.ChangeQueue;
+import com.mapman.engine.RuleRegistry;
 import com.mapman.listener.PlayerListener;
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
 import java.util.Objects;
 
 /**
- * MapMan 主插件类。
- * <p>
+ * MapMan — 条件驱动客户端方块替换插件。
+ *
  * 生命周期：
- * <pre>
  * onEnable()
  *   ├─ 保存默认 config.yml
+ *   ├─ 加载 rules.yml
  *   ├─ 加载 Region 配置
  *   ├─ 初始化 WeatherManager（加载 data.yml）
- *   ├─ 初始化 FakeBlockCache
- *   ├─ 初始化 FakeBlockQueue（注册每 tick 运行的任务）
- *   ├─ 初始化 FakeBlockManager
+ *   ├─ 初始化 RuleRegistry（编译条件）
+ *   ├─ 初始化 BlockApplier + ChangeQueue
  *   ├─ 预热已加载 Chunk 缓存
+ *   ├─ 启动 ChangeQueue 定时任务
+ *   ├─ 启动条件重评估定时任务
  *   ├─ 注册 Listener
  *   └─ 注册 Command
- *
- * onDisable()
- *   ├─ 取消队列任务
- *   ├─ 保存玩家天气数据
- *   └─ 清理所有玩家的假方块缓存
- * </pre>
  */
 public final class MapMan extends JavaPlugin {
 
     private WeatherManager weatherManager;
-    private FakeBlockCache fakeBlockCache;
-    private FakeBlockQueue fakeBlockQueue;
-    private FakeBlockManager fakeBlockManager;
+    private RuleRegistry ruleRegistry;
+    private BlockApplier blockApplier;
     private Region region;
     private int viewDistance;
 
@@ -63,37 +61,39 @@ public final class MapMan extends JavaPlugin {
         // 3. 性能设置
         this.viewDistance = getConfig().getInt("performance.view-distance", 3);
         int maxPerTick = getConfig().getInt("performance.max-per-tick", 200);
+        int reEvalInterval = getConfig().getInt("performance.re-eval-interval", 100); // ticks
 
-        // 4. 初始化各管理器
+        // 4. 加载规则
+        this.ruleRegistry = new RuleRegistry();
+        loadRules();
+
+        // 5. 初始化各管理器
         this.weatherManager = new WeatherManager(this);
-        this.fakeBlockCache = new FakeBlockCache();
-        this.fakeBlockQueue = new FakeBlockQueue(this, maxPerTick);
-        this.fakeBlockManager = new FakeBlockManager(this, region, targetWorld);
+        this.blockApplier = new BlockApplier(this, ruleRegistry, region, targetWorld, viewDistance, maxPerTick);
 
-        // 5. 加载玩家数据
+        // 6. 加载玩家数据
         weatherManager.load();
 
-        // 6. 启动队列（每 tick 处理一批）
-        fakeBlockQueue.runTaskTimer(this, 1L, 1L);
+        // 7. 启动队列（每 tick 处理一批）
+        blockApplier.changeQueue().runTaskTimer(this, 1L, 1L);
 
-        // 7. 预热缓存：扫描已加载 Chunk 的表面水位置
+        // 8. 预热缓存
         Bukkit.getScheduler().runTaskLater(this, () -> {
-            int count = 0;
-            for (Chunk chunk : targetWorld.getLoadedChunks()) {
-                fakeBlockManager.preCacheChunk(chunk);
-                count++;
-            }
-            getLogger().info("预热完成，已扫描 " + count + " 个 Chunk，缓存 " + fakeBlockManager.cachedChunksCount() + " 个含表面水的 Chunk。");
+            blockApplier.preWarm();
         }, 10L);
 
-        // 8. 定时保存玩家数据
+        // 9. 定时保存玩家数据
         int saveInterval = getConfig().getInt("save-interval", 1200);
         Bukkit.getScheduler().runTaskTimerAsynchronously(this,
                 () -> weatherManager.save(),
                 saveInterval, saveInterval);
 
-        // 9. 注册事件和指令
+        // 10. 定时重新评估条件
+        blockApplier.startReEvalTimer(reEvalInterval);
+
+        // 11. 注册事件和指令
         Bukkit.getPluginManager().registerEvents(new PlayerListener(this), this);
+        Objects.requireNonNull(getCommand("mapman")).setExecutor(new MapManCommand(this));
         Objects.requireNonNull(getCommand("weather")).setExecutor(new WeatherCommand(this));
 
         getLogger().info("MapMan 已启用。");
@@ -102,9 +102,9 @@ public final class MapMan extends JavaPlugin {
     @Override
     public void onDisable() {
         // 1. 取消队列
-        if (fakeBlockQueue != null) {
-            fakeBlockQueue.cancel();
-            fakeBlockQueue.clear();
+        if (blockApplier != null) {
+            blockApplier.changeQueue().cancel();
+            blockApplier.changeQueue().clear();
         }
 
         // 2. 保存玩家数据
@@ -116,30 +116,30 @@ public final class MapMan extends JavaPlugin {
     }
 
     // ========================================================================
+    // 规则加载
+    // ========================================================================
+
+    /** 加载 rules.yml */
+    public void loadRules() {
+        File rulesFile = new File(getDataFolder(), "rules.yml");
+        if (!rulesFile.exists()) {
+            saveResource("rules.yml", false);
+        }
+        ruleRegistry.load(rulesFile);
+        getLogger().info("已加载 " + ruleRegistry.rules().size() + " 条规则。");
+    }
+
+    // ========================================================================
     // 访问器
     // ========================================================================
 
-    public WeatherManager getWeatherManager() {
-        return weatherManager;
-    }
+    public WeatherManager getWeatherManager() { return weatherManager; }
+    public RuleRegistry getRuleRegistry() { return ruleRegistry; }
+    public BlockApplier getBlockApplier() { return blockApplier; }
+    public Region getRegion() { return region; }
+    public int getViewDistance() { return viewDistance; }
 
-    public FakeBlockCache getFakeBlockCache() {
-        return fakeBlockCache;
-    }
-
-    public FakeBlockQueue getFakeBlockQueue() {
-        return fakeBlockQueue;
-    }
-
-    public FakeBlockManager getFakeBlockManager() {
-        return fakeBlockManager;
-    }
-
-    public Region getRegion() {
-        return region;
-    }
-
-    public int getViewDistance() {
-        return viewDistance;
-    }
+    /** @deprecated 旧版 API 兼容，返回 blockApplier 的 changeQueue */
+    @Deprecated
+    public ChangeQueue getFakeBlockQueue() { return blockApplier != null ? blockApplier.changeQueue() : null; }
 }
