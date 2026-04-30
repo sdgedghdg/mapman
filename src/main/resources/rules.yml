@@ -1,51 +1,108 @@
 # ============================================================
-# MapMan 条件驱动方块替换规则
+# MapMan 条件驱动客户端方块替换 — 规则配置
 # ============================================================
 #
 # 每条规则包含：
-#   priority    — 优先级（越高越优先）
-#   conditions  — CraftEngine 条件（参考 CE 文档）
+#   priority    — 优先级（越高越优先匹配）
+#   conditions  — 条件列表，所有条件必须同时满足（AND 语义）
 #   changes     — target:replace 映射
 #
-# target/replace 支持格式：
-#   minecraft:water     — 原版方块
-#   default:topaz_ore   — CraftEngine 自定义方块
+# target / replace 格式：
+#   minecraft:water       — 原版方块
+#   default:topaz_ore     — CraftEngine 自定义方块（需 CraftEngine）
 #
-# 示例规则：
+# ============================================================
+# 条件类型参考（由 CraftEngine 提供）
+# ============================================================
 #
-# rules:
-#   winter_freeze:
-#     priority: 100
-#     conditions:
-#       - type: expression
-#         expression: "<papi:season> == winter"
-#     changes:
-#       minecraft:water: minecraft:packed_ice
-#       minecraft:grass_block: minecraft:snow_block
+# ■ expression — EvalEx 表达式，支持 <papi:占位符>
+#   conditions:
+#     - type: expression
+#       expression: "<papi:player_world> == world"
 #
-#   snow_weather:
-#     priority: 50
-#     conditions:
-#       - type: expression
-#         expression: "<papi:storm>"
-#     changes:
-#       minecraft:water: minecraft:ice
+#   PAPI 示例：
+#     - type: expression
+#       expression: "<papi:season> == winter"
+#     - type: expression
+#       expression: "<papi:player_biome> == minecraft:desert"
+#     - type: expression
+#       expression: "<papi:player_gamemode> == survival"
+#     - type: expression
+#       expression: "<papi:player_has_permission_mapman.vip> == yes"
+#     - type: expression
+#       expression: "<papi:server_time> > 18000 && <papi:server_time> < 6000"
+#     - type: expression
+#       expression: "<papi:player_y> < 64"
+#     - type: expression
+#       expression: "<papi:storm> == true"
+#     - type: expression
+#       expression: "<papi:thundering> == true"
+#
+# ■ permission — 检查玩家权限
+#   conditions:
+#     - type: permission
+#       permission: "mapman.vip"
+#
+# ■ any_of — 满足任一子条件即可
+#   conditions:
+#     - type: any_of
+#       terms:
+#         - type: expression
+#           expression: "<papi:season> == winter"
+#         - type: expression
+#           expression: "<papi:season> == summer"
+#
+# ■ all_of — 所有子条件必须同时满足（通常不需要，顶层 conditions 列表本身就是 AND）
+#   conditions:
+#     - type: all_of
+#       terms:
+#         - type: expression
+#           expression: "<papi:season> == winter"
+#         - type: permission
+#           permission: "mapman.freeze"
+#
+# ■ inverted — 取反
+#   conditions:
+#     - type: inverted
+#       term:
+#         type: permission
+#         permission: "mapman.bypass"
+#
+# ■ random — 概率条件（0~1）
+#   conditions:
+#     - type: random
+#       chance: 0.3
+#
+# ■ distance — 距离某坐标范围
+#   conditions:
+#     - type: distance
+#       x: 0
+#       y: 64
+#       z: 0
+#       max-distance: 50
+#       world: "world"
+#
+# ■ worldguard:region — WorldGuard 区域检查（需 WorldGuard）
+#   conditions:
+#     - type: worldguard:region
+#       region: "spawn"
+#
+# 注：无条件（conditions 留空或省略）即对所有玩家生效。
+# 注：所有 CraftEngine 条件均需 CraftEngine 插件。无 CE 时条件视为恒真。
+#
+# ============================================================
 
 rules:
-  # 冬季河面结冰
+  # 冬季河面结冰（PAPI season 占位符）
   winter_freeze:
     priority: 100
     conditions:
-      - type: any_of
-        terms:
-          - type: expression
-            expression: "<papi:season> == winter"
-          - type: expression
-            expression: "<papi:weather> == thunder"
+      - type: expression
+        expression: "<papi:season> == winter"
     changes:
       minecraft:water: minecraft:packed_ice
 
-  # 下雪天气水面结冰
+  # 雷雨天气水面结冰（PAPI storm 占位符）
   snow_weather:
     priority: 50
     conditions:
@@ -53,3 +110,41 @@ rules:
         expression: "<papi:storm>"
     changes:
       minecraft:water: minecraft:ice
+
+  # ———— 更多示例（取消注释即可启用） ————
+
+  # 沙漠生物群系水蒸发
+  # desert_evaporate:
+  #   priority: 80
+  #   conditions:
+  #     - type: expression
+  #       expression: "<papi:player_biome> == minecraft:desert"
+  #   changes:
+  #     minecraft:water: minecraft:air
+
+  # VIP 玩家羊毛变钻石块
+  # vip_wool:
+  #   priority: 200
+  #   conditions:
+  #     - type: permission
+  #       permission: "mapman.vip"
+  #   changes:
+  #     minecraft:white_wool: minecraft:diamond_block
+
+  # 低海拔地区草地变沙地（Y<64）
+  # low_grass:
+  #   priority: 60
+  #   conditions:
+  #     - type: expression
+  #       expression: "<papi:player_y> < 64"
+  #   changes:
+  #     minecraft:grass_block: minecraft:sand
+
+  # CE 自定义方块替换（需 CraftEngine）
+  # replace_ce_block:
+  #   priority: 150
+  #   conditions:
+  #     - type: expression
+  #       expression: "<papi:season> == winter"
+  #   changes:
+  #     default:crystal_water: minecraft:packed_ice

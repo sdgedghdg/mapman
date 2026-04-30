@@ -75,7 +75,8 @@ public final class ConditionEvaluator {
      * @param bukkitPlayer Bukkit 玩家
      * @return 是否满足条件
      */
-    public static boolean evaluate(@Nullable Condition<Context> condition,
+    @SuppressWarnings("unchecked")
+    public static boolean evaluate(@Nullable Object condition,
                                    org.bukkit.entity.Player bukkitPlayer) {
         if (condition == null) return true;
         if (!MapMan.hasCraftEngine()) return true;
@@ -86,7 +87,7 @@ public final class ConditionEvaluator {
                             .withParameter(DirectContextParameters.PLAYER, cePlayer)
                             .build()
             );
-            return condition.test(ctx);
+            return ((Condition<Context>) condition).test(ctx);
         } catch (Exception e) {
             return false;
         }

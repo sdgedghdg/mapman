@@ -1,8 +1,7 @@
 package com.mapman.engine;
 
+import com.mapman.MapMan;
 import com.mapman.Region;
-import net.momirealms.craftengine.core.plugin.context.Condition;
-import net.momirealms.craftengine.core.plugin.context.Context;
 import org.bukkit.Material;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.configuration.ConfigurationSection;
@@ -54,17 +53,19 @@ public final class RuleRegistry {
 
             int priority = section.getInt("priority", 0);
 
-            // 条件
-            Condition<Context> condition = null;
-            List<Map<?, ?>> rawConditions = section.getMapList("conditions");
-            if (!rawConditions.isEmpty()) {
-                List<Map<String, Object>> typed = new ArrayList<>();
-                for (Map<?, ?> raw : rawConditions) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> m = (Map<String, Object>) raw;
-                    typed.add(m);
+            // 条件（仅在 CE 可用时编译，否则 condition 恒为 null = 恒真）
+            Object condition = null;
+            if (MapMan.hasCraftEngine()) {
+                List<Map<?, ?>> rawConditions = section.getMapList("conditions");
+                if (!rawConditions.isEmpty()) {
+                    List<Map<String, Object>> typed = new ArrayList<>();
+                    for (Map<?, ?> raw : rawConditions) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> m = (Map<String, Object>) raw;
+                        typed.add(m);
+                    }
+                    condition = ConditionEvaluator.compileAny(typed);
                 }
-                condition = ConditionEvaluator.compileAny(typed);
             }
 
             // 替换映射

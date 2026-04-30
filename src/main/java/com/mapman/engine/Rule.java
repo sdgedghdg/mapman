@@ -1,8 +1,6 @@
 package com.mapman.engine;
 
 import com.mapman.BlockPosition;
-import net.momirealms.craftengine.core.plugin.context.Condition;
-import net.momirealms.craftengine.core.plugin.context.Context;
 
 import java.util.Map;
 import java.util.Set;
@@ -13,7 +11,7 @@ import java.util.Set;
 public class Rule {
     private final String id;
     private final int priority;
-    private final Condition<Context> condition; // null = 无条件
+    private final Object condition; // Condition<Context> 或 null（CE 不可用时恒为 null）
     private final Map<String, String> changes; // target identifier → replace identifier
     private final Set<String> targetBlockIds; // 此规则涉及的所有目标方块 ID
 
@@ -21,7 +19,7 @@ public class Rule {
     // 用于撤销时精确恢复
     private final Map<java.util.UUID, Set<BlockPosition>> appliedBlocks = new java.util.concurrent.ConcurrentHashMap<>();
 
-    public Rule(String id, int priority, Condition<Context> condition,
+    public Rule(String id, int priority, Object condition,
                 Map<String, String> changes, Set<String> targetBlockIds) {
         this.id = id;
         this.priority = priority;
@@ -32,7 +30,7 @@ public class Rule {
 
     public String id() { return id; }
     public int priority() { return priority; }
-    public Condition<Context> condition() { return condition; }
+    public Object condition() { return condition; }
     public Map<String, String> changes() { return changes; }
     public Set<String> targetBlockIds() { return targetBlockIds; }
 
