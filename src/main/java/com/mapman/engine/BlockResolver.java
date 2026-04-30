@@ -2,7 +2,6 @@ package com.mapman.engine;
 
 import com.mapman.MapMan;
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks;
-import net.momirealms.craftengine.bukkit.util.BlockStateUtils;
 import net.momirealms.craftengine.core.block.CustomBlock;
 import net.momirealms.craftengine.core.util.Key;
 import org.bukkit.Material;
@@ -100,8 +99,7 @@ public final class BlockResolver {
             Key key = Key.from(namespace + ":" + path);
             CustomBlock block = CraftEngineBlocks.byId(key);
             if (block == null) return null;
-            Object nmsState = block.defaultState().visualBlockState().literalObject();
-            return BlockStateUtils.fromBlockData(nmsState);
+            return CraftEngineBlocks.getBukkitBlockData(block.defaultState());
         } catch (Exception e) {
             return null;
         }
