@@ -1,5 +1,6 @@
 package com.mapman.engine;
 
+import com.mapman.MapMan;
 import net.momirealms.craftengine.bukkit.plugin.BukkitCraftEngine;
 import net.momirealms.craftengine.core.entity.player.Player;
 import net.momirealms.craftengine.core.plugin.context.CommonConditions;
@@ -15,6 +16,7 @@ import java.util.Map;
 /**
  * CraftEngine 条件求值器桥接层。
  * 将配置中的条件定义编译为 CE Condition 对象，并针对玩家求值。
+ * 当 CE 不可用时，所有条件视为恒真。
  */
 public final class ConditionEvaluator {
 
@@ -28,7 +30,7 @@ public final class ConditionEvaluator {
      */
     @Nullable
     public static Condition<Context> compile(Map<String, Object> conditionMap) {
-        if (conditionMap == null || conditionMap.isEmpty()) return null;
+        if (!MapMan.hasCraftEngine() || conditionMap == null || conditionMap.isEmpty()) return null;
         try {
             return CommonConditions.fromMap(conditionMap);
         } catch (Exception e) {
@@ -42,7 +44,7 @@ public final class ConditionEvaluator {
      */
     @Nullable
     public static Condition<Context> compileAny(java.util.List<Map<String, Object>> conditionMaps) {
-        if (conditionMaps == null || conditionMaps.isEmpty()) return null;
+        if (!MapMan.hasCraftEngine() || conditionMaps == null || conditionMaps.isEmpty()) return null;
         if (conditionMaps.size() == 1) {
             return compile(conditionMaps.get(0));
         }
@@ -76,6 +78,7 @@ public final class ConditionEvaluator {
     public static boolean evaluate(@Nullable Condition<Context> condition,
                                    org.bukkit.entity.Player bukkitPlayer) {
         if (condition == null) return true;
+        if (!MapMan.hasCraftEngine()) return true;
         try {
             Player cePlayer = BukkitCraftEngine.instance().adapt(bukkitPlayer);
             Context ctx = SimpleContext.of(

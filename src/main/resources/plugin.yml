@@ -3,7 +3,7 @@ version: 1.0.0
 main: com.mapman.MapMan
 api-version: 1.21
 folia-supported: false
-depend:
+softdepend:
   - CraftEngine
 
 commands:

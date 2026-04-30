@@ -1,5 +1,6 @@
 package com.mapman.engine;
 
+import com.mapman.MapMan;
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks;
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils;
 import net.momirealms.craftengine.core.block.CustomBlock;
@@ -11,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 方块标识符解析器。
  * 将 "minecraft:water" 或 "default:topaz_ore" 等字符串解析为 BlockData。
+ * CE 不可用时，自定义方块 ID 统一返回 null。
  */
 public final class BlockResolver {
 
@@ -56,14 +58,15 @@ public final class BlockResolver {
 
         if (namespace.equals(VANILLA_NAMESPACE)) {
             return Material.matchMaterial(path, false);
-        } else {
-            // CE 自定义方块: 找到其默认状态的视觉 BlockData 再取 Material
+        } else if (MapMan.hasCraftEngine()) {
             Key key = Key.from(id);
             CustomBlock block = CraftEngineBlocks.byId(key);
             if (block == null) return null;
             BlockData visualData = resolveCustom(namespace, path);
             if (visualData == null) return null;
             return visualData.getMaterial();
+        } else {
+            return null;
         }
     }
 
@@ -71,11 +74,10 @@ public final class BlockResolver {
      * 检查标识符是否指向 CraftEngine 自定义方块。
      */
     public static boolean isCustomBlockId(String id) {
-        if (id == null || id.isEmpty()) return false;
+        if (!MapMan.hasCraftEngine() || id == null || id.isEmpty()) return false;
         int colon = id.indexOf(':');
-        if (colon <= 0) return false; // 没有 namespace 或 minecraft:xxx
-        String namespace = id.substring(0, colon);
-        return !namespace.equals(VANILLA_NAMESPACE);
+        if (colon <= 0) return false;
+        return !id.substring(0, colon).equals(VANILLA_NAMESPACE);
     }
 
     // ========== 内部解析 ==========
@@ -93,11 +95,11 @@ public final class BlockResolver {
 
     @Nullable
     private static BlockData resolveCustom(String namespace, String path) {
+        if (!MapMan.hasCraftEngine()) return null;
         try {
             Key key = Key.from(namespace + ":" + path);
             CustomBlock block = CraftEngineBlocks.byId(key);
             if (block == null) return null;
-            // 取默认状态的 visualBlockState 转为 Bukkit BlockData
             Object nmsState = block.defaultState().visualBlockState().literalObject();
             return BlockStateUtils.fromBlockData(nmsState);
         } catch (Exception e) {

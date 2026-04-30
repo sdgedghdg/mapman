@@ -32,6 +32,8 @@ import java.util.Objects;
  */
 public final class MapMan extends JavaPlugin {
 
+    private static boolean craftEngineAvailable = false;
+
     private WeatherManager weatherManager;
     private RuleRegistry ruleRegistry;
     private BlockApplier blockApplier;
@@ -45,6 +47,15 @@ public final class MapMan extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+
+        // 0. 检测 CraftEngine 是否可用
+        craftEngineAvailable = Bukkit.getPluginManager().getPlugin("CraftEngine") != null;
+        if (craftEngineAvailable) {
+            getLogger().info("检测到 CraftEngine，启用完整条件系统与 CE 方块支持。");
+        } else {
+            getLogger().warning("未检测到 CraftEngine。条件求值系统将不可用，所有条件视为恒真。");
+            getLogger().warning("CE 自定义方块目标也无法解析。插件仅支持原版方块替换。");
+        }
 
         // 1. 加载区域
         this.region = Region.fromConfig(getConfig().getConfigurationSection("region"));
@@ -130,8 +141,11 @@ public final class MapMan extends JavaPlugin {
     }
 
     // ========================================================================
-    // 访问器
+    // 访问器 / 工具
     // ========================================================================
+
+    /** CraftEngine 是否已加载 */
+    public static boolean hasCraftEngine() { return craftEngineAvailable; }
 
     public WeatherManager getWeatherManager() { return weatherManager; }
     public RuleRegistry getRuleRegistry() { return ruleRegistry; }

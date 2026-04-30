@@ -158,6 +158,7 @@ public final class ChunkScanner {
      */
     private void scanCECustomBlocks(ChunkCoord coord, int chunkWorldX, int chunkWorldZ,
                                      int minY, int maxY, Map<BlockPosition, BlockData> result) {
+        if (!com.mapman.MapMan.hasCraftEngine()) return;
         CEWorld ceWorld = BukkitCraftEngine.instance().worldManager().getWorld(targetWorld);
         if (ceWorld == null) return;
 
