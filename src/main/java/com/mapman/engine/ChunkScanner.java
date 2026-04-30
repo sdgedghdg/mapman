@@ -182,7 +182,10 @@ public final class ChunkScanner {
                         ImmutableBlockState ceState = ceChunk.getBlockState(worldX, y, worldZ);
                         if (ceState == null || ceState.isEmpty()) continue;
 
-                        String ceId = ceState.owner().key().asString();
+                        String ceId = ceState.owner().keyOptional()
+                                .map(k -> k.location().asString())
+                                .orElse(null);
+                        if (ceId == null) continue;
                         if (customIds.contains(ceId)) {
                             BlockData visualData = BlockStateUtils.fromBlockData(ceState.visualBlockState().literalObject());
                             result.put(pos, visualData);

@@ -6,6 +6,7 @@ import net.momirealms.craftengine.core.plugin.context.CommonConditions;
 import net.momirealms.craftengine.core.plugin.context.Condition;
 import net.momirealms.craftengine.core.plugin.context.Context;
 import net.momirealms.craftengine.core.plugin.context.ContextHolder;
+import net.momirealms.craftengine.core.plugin.context.SimpleContext;
 import net.momirealms.craftengine.core.plugin.context.parameter.DirectContextParameters;
 import org.jetbrains.annotations.Nullable;
 
@@ -77,9 +78,11 @@ public final class ConditionEvaluator {
         if (condition == null) return true;
         try {
             Player cePlayer = BukkitCraftEngine.instance().adapt(bukkitPlayer);
-            Context ctx = new ContextHolder.Builder()
-                    .withParameter(DirectContextParameters.PLAYER, cePlayer)
-                    .build();
+            Context ctx = SimpleContext.of(
+                    new ContextHolder.Builder()
+                            .withParameter(DirectContextParameters.PLAYER, cePlayer)
+                            .build()
+            );
             return condition.test(ctx);
         } catch (Exception e) {
             return false;
