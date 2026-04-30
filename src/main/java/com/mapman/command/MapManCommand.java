@@ -52,9 +52,18 @@ public final class MapManCommand implements CommandExecutor {
     }
 
     private boolean handleReload(@NotNull CommandSender sender) {
-        plugin.reloadConfig();
+        plugin.reloadRegion();
         plugin.loadRules();
-        sender.sendMessage(Component.text("配置已重载。", NamedTextColor.GREEN));
+        BlockApplier applier = plugin.getBlockApplier();
+        if (applier != null) {
+            applier.clearAllCaches();
+            // 为所有在线玩家重新应用
+            for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
+                applier.undoAll(p);
+                applier.applyForPlayer(p);
+            }
+        }
+        sender.sendMessage(Component.text("配置已重载，缓存已清空，所有玩家已重新应用。", NamedTextColor.GREEN));
         return true;
     }
 
@@ -121,8 +130,9 @@ public final class MapManCommand implements CommandExecutor {
         }
         BlockApplier applier = plugin.getBlockApplier();
         if (applier != null) {
+            applier.undoAll(player);
             applier.applyForPlayer(player);
-            sender.sendMessage(Component.text("已强制应用规则。", NamedTextColor.GREEN));
+            sender.sendMessage(Component.text("已撤销并重新应用规则。", NamedTextColor.GREEN));
         }
         return true;
     }

@@ -140,6 +140,12 @@ public final class MapMan extends JavaPlugin {
         getLogger().info("已加载 " + ruleRegistry.rules().size() + " 条规则。");
     }
 
+    /** 重新加载区域配置 */
+    public void reloadRegion() {
+        reloadConfig();
+        this.region = Region.fromConfig(getConfig().getConfigurationSection("region"));
+    }
+
     // ========================================================================
     // 访问器 / 工具
     // ========================================================================

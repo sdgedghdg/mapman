@@ -242,6 +242,13 @@ public final class ChunkScanner {
         ceBlockIdCache.remove(coord);
     }
 
+    /** 清除所有缓存 */
+    public void clearAll() {
+        scanCache.clear();
+        blockDataCache.clear();
+        ceBlockIdCache.clear();
+    }
+
     /**
      * 计算新进入视野的 Chunk。
      */

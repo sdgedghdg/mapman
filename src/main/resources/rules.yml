@@ -68,10 +68,10 @@
 #         type: permission
 #         permission: "mapman.bypass"
 #
-# ■ random — 概率条件（0~1）
+# ■ random — 概率条件（0~1），字段为 value；可选 use-last: true 复用上次随机值
 #   conditions:
 #     - type: random
-#       chance: 0.3
+#       value: 0.3
 #
 # ■ distance — 距离某坐标范围
 #   conditions:

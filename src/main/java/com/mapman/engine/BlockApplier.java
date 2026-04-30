@@ -84,7 +84,7 @@ public final class BlockApplier {
                 // 找到匹配的替换
                 BlockData replacement = findReplacement(player, pos, entry.getValue(), activeRules);
                 if (replacement != null) {
-                    playerBlockCache.add(player.getUniqueId(), pos, entry.getValue(), "");
+                    playerBlockCache.add(player.getUniqueId(), pos, entry.getValue(), replacement, "");
                     changeQueue.enqueue(player.getUniqueId(),
                             new Location(targetWorld, pos.x(), pos.y(), pos.z()),
                             replacement);
@@ -123,7 +123,7 @@ public final class BlockApplier {
                     if (playerBlockCache.contains(player.getUniqueId(), pos)) continue;
                     BlockData replacement = findReplacement(player, pos, entry.getValue(), activeRules);
                     if (replacement != null) {
-                        playerBlockCache.add(player.getUniqueId(), pos, entry.getValue(), "");
+                        playerBlockCache.add(player.getUniqueId(), pos, entry.getValue(), replacement, "");
                         changeQueue.enqueue(player.getUniqueId(),
                                 new Location(targetWorld, pos.x(), pos.y(), pos.z()),
                                 replacement);
@@ -161,7 +161,7 @@ public final class BlockApplier {
                     if (playerBlockCache.contains(player.getUniqueId(), pos)) continue;
                     BlockData replacement = findReplacement(player, pos, entry.getValue(), activeRules);
                     if (replacement != null) {
-                        playerBlockCache.add(player.getUniqueId(), pos, entry.getValue(), "");
+                        playerBlockCache.add(player.getUniqueId(), pos, entry.getValue(), replacement, "");
                         changeQueue.enqueue(player.getUniqueId(),
                                 new Location(targetWorld, pos.x(), pos.y(), pos.z()),
                                 replacement);
@@ -189,16 +189,46 @@ public final class BlockApplier {
 
     /**
      * 重新评估玩家的规则条件，如有变化则全量刷新。
+     * 同时重新发送假方块以防止客户端丢包还原。
      */
     public void reEvaluate(Player player) {
         if (!player.isOnline() || !player.getWorld().equals(targetWorld)) return;
 
         List<Rule> newActive = ruleRegistry.getActiveRules(player);
         if (ruleRegistry.haveRulesChanged(player, newActive)) {
-            // 规则集变了，全量刷新
             undoAll(player);
             applyForPlayer(player);
+        } else {
+            // 规则未变但客户端可能丢包，重新发送当前位置的假方块
+            refreshForPlayer(player);
         }
+    }
+
+    /**
+     * 重新发送玩家当前位置视野内的假方块（不重新评估条件）。
+     */
+    public void refreshForPlayer(Player player) {
+        Map<BlockPosition, BlockData> sent = playerBlockCache.getSentBlocks(player.getUniqueId());
+        if (sent.isEmpty()) return;
+
+        ChunkCoord center = ChunkCoord.fromLocation(player.getLocation());
+        for (Map.Entry<BlockPosition, BlockData> entry : sent.entrySet()) {
+            BlockPosition pos = entry.getKey();
+            // 只刷新视野内的方块
+            int dx = (pos.x() >> 4) - center.x();
+            int dz = (pos.z() >> 4) - center.z();
+            if (Math.abs(dx) <= viewDistance && Math.abs(dz) <= viewDistance) {
+                changeQueue.enqueue(player.getUniqueId(),
+                        new Location(targetWorld, pos.x(), pos.y(), pos.z()),
+                        entry.getValue());
+            }
+        }
+    }
+
+    /** 清除所有缓存（reload 时调用） */
+    public void clearAllCaches() {
+        chunkScanner.clearAll();
+        playerBlockCache.clearAll();
     }
 
     // ========================================================================
