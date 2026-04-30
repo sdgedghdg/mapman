@@ -3,7 +3,12 @@ package com.mapman.engine;
 import com.mapman.BlockPosition;
 import com.mapman.Region;
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks;
+import net.momirealms.craftengine.bukkit.plugin.BukkitCraftEngine;
+import net.momirealms.craftengine.bukkit.util.BlockStateUtils;
+import net.momirealms.craftengine.core.block.ImmutableBlockState;
 import net.momirealms.craftengine.core.util.Key;
+import net.momirealms.craftengine.core.world.CEWorld;
+import net.momirealms.craftengine.core.world.chunk.CEChunk;
 import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Material;
@@ -25,6 +30,8 @@ public final class ChunkScanner {
     private final Map<ChunkCoord, Set<BlockPosition>> scanCache = new ConcurrentHashMap<>();
     /** Chunk → 对应的目标方块数据缓存（用于精确匹配） */
     private final Map<ChunkCoord, Map<BlockPosition, BlockData>> blockDataCache = new ConcurrentHashMap<>();
+    /** Chunk → CE 自定义方块 ID 缓存 */
+    private final Map<ChunkCoord, Map<BlockPosition, String>> ceBlockIdCache = new ConcurrentHashMap<>();
 
     private final RuleRegistry ruleRegistry;
     private final Region region;
@@ -97,41 +104,42 @@ public final class ChunkScanner {
         }
 
         Set<Material> targetMats = ruleRegistry.targetMaterials();
-        if (targetMats.isEmpty()) return Collections.emptyMap();
-
-        ChunkSnapshot snapshot;
-        try {
-            snapshot = chunk.getChunkSnapshot();
-        } catch (Exception e) {
-            return Collections.emptyMap();
-        }
-
         int minY = region.minY();
         int maxY = region.maxY();
         Map<BlockPosition, BlockData> result = new HashMap<>();
 
-        // 注意: region.containsHorizontal 已检查过水平范围
-        for (int dx = 0; dx < 16; dx++) {
-            for (int dz = 0; dz < 16; dz++) {
-                int worldX = chunkWorldX + dx;
-                int worldZ = chunkWorldZ + dz;
-                if (!region.containsHorizontal(worldX, worldZ)) continue;
+        // 原版方块扫描
+        if (!targetMats.isEmpty()) {
+            ChunkSnapshot snapshot;
+            try {
+                snapshot = chunk.getChunkSnapshot();
+            } catch (Exception e) {
+                return Collections.emptyMap();
+            }
 
-                // 从上往下扫描
-                for (int y = maxY - 1; y >= minY; y--) {
-                    Material type = snapshot.getBlockType(dx, y, dz);
-                    if (type == Material.AIR) continue;
-                    if (targetMats.contains(type)) {
-                        BlockPosition pos = new BlockPosition(worldX, y, worldZ);
-                        if (region.contains(worldX, y, worldZ)) {
-                            BlockData blockData = type.createBlockData();
-                            // 检查是否是 CE 自定义方块
-                            String blockId = "minecraft:" + type.getKey().getKey();
-                            result.put(pos, blockData);
+            for (int dx = 0; dx < 16; dx++) {
+                for (int dz = 0; dz < 16; dz++) {
+                    int worldX = chunkWorldX + dx;
+                    int worldZ = chunkWorldZ + dz;
+                    if (!region.containsHorizontal(worldX, worldZ)) continue;
+
+                    for (int y = maxY - 1; y >= minY; y--) {
+                        Material type = snapshot.getBlockType(dx, y, dz);
+                        if (type == Material.AIR) continue;
+                        if (targetMats.contains(type)) {
+                            BlockPosition pos = new BlockPosition(worldX, y, worldZ);
+                            if (region.contains(worldX, y, worldZ)) {
+                                result.put(pos, type.createBlockData());
+                            }
                         }
                     }
                 }
             }
+        }
+
+        // CE 自定义方块扫描（仅当 rules 中有 CE 目标时）
+        if (!ruleRegistry.targetCustomIds().isEmpty()) {
+            scanCECustomBlocks(coord, chunkWorldX, chunkWorldZ, minY, maxY, result);
         }
 
         // 写入缓存
@@ -142,6 +150,64 @@ public final class ChunkScanner {
         }
 
         return result;
+    }
+
+    /**
+     * 扫描 CE 自定义方块，匹配 targetCustomIds。
+     * 跳过已被 vanilla 扫描找到的坐标。
+     */
+    private void scanCECustomBlocks(ChunkCoord coord, int chunkWorldX, int chunkWorldZ,
+                                     int minY, int maxY, Map<BlockPosition, BlockData> result) {
+        CEWorld ceWorld = BukkitCraftEngine.instance().worldManager().getWorld(targetWorld);
+        if (ceWorld == null) return;
+
+        CEChunk ceChunk = ceWorld.getChunkAtIfLoaded(coord.x(), coord.z());
+        if (ceChunk == null) return;
+
+        Set<String> customIds = ruleRegistry.targetCustomIds();
+        Map<BlockPosition, String> ceIds = new HashMap<>();
+
+        for (int dx = 0; dx < 16; dx++) {
+            for (int dz = 0; dz < 16; dz++) {
+                int worldX = chunkWorldX + dx;
+                int worldZ = chunkWorldZ + dz;
+                if (!region.containsHorizontal(worldX, worldZ)) continue;
+
+                for (int y = maxY - 1; y >= minY; y--) {
+                    BlockPosition pos = new BlockPosition(worldX, y, worldZ);
+                    if (!region.contains(worldX, y, worldZ)) continue;
+                    if (result.containsKey(pos)) continue; // vanilla 已匹配
+
+                    try {
+                        ImmutableBlockState ceState = ceChunk.getBlockState(worldX, y, worldZ);
+                        if (ceState == null || ceState.isEmpty()) continue;
+
+                        String ceId = ceState.owner().key().asString();
+                        if (customIds.contains(ceId)) {
+                            BlockData visualData = BlockStateUtils.fromBlockData(ceState.visualBlockState().literalObject());
+                            result.put(pos, visualData);
+                            ceIds.put(pos, ceId);
+                        }
+                    } catch (Exception ignored) {
+                        // 跳过异常位置
+                    }
+                }
+            }
+        }
+
+        if (!ceIds.isEmpty()) {
+            ceBlockIdCache.put(coord, ceIds);
+        }
+    }
+
+    /**
+     * 获取某坐标的 CE 自定义方块 ID。
+     */
+    @org.jetbrains.annotations.Nullable
+    public String getCeBlockId(ChunkCoord coord, BlockPosition pos) {
+        Map<BlockPosition, String> ceIds = ceBlockIdCache.get(coord);
+        if (ceIds == null) return null;
+        return ceIds.get(pos);
     }
 
     /**
@@ -169,6 +235,7 @@ public final class ChunkScanner {
     public void invalidate(ChunkCoord coord) {
         scanCache.remove(coord);
         blockDataCache.remove(coord);
+        ceBlockIdCache.remove(coord);
     }
 
     /**

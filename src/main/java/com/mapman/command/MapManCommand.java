@@ -12,6 +12,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Set;
+
 /**
  * /mapman 指令处理器。
  *
@@ -86,6 +88,11 @@ public final class MapManCommand implements CommandExecutor {
                 .append(Component.text(String.valueOf(plugin.getRuleRegistry().rules().size()), NamedTextColor.WHITE)));
         sender.sendMessage(Component.text("目标 Material 集合: ", NamedTextColor.AQUA)
                 .append(Component.text(plugin.getRuleRegistry().targetMaterials().toString(), NamedTextColor.WHITE)));
+        Set<String> customIds = plugin.getRuleRegistry().targetCustomIds();
+        if (!customIds.isEmpty()) {
+            sender.sendMessage(Component.text("目标 CE 方块: ", NamedTextColor.AQUA)
+                    .append(Component.text(customIds.toString(), NamedTextColor.WHITE)));
+        }
 
         if (sender instanceof Player player) {
             sender.sendMessage(Component.text("所在世界: ", NamedTextColor.AQUA)

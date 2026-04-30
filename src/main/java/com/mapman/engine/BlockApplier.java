@@ -207,10 +207,23 @@ public final class BlockApplier {
 
     /**
      * 找匹配的替换方块。
+     * 优先匹配 CE 自定义方块 ID，再按原版 material 匹配。
      */
     private BlockData findReplacement(Player player, BlockPosition pos,
                                        BlockData originalData, List<Rule> activeRules) {
-        // 确定目标方块 ID
+        // 先检查 CE 自定义方块 ID
+        ChunkCoord coord = new ChunkCoord(pos.x() >> 4, pos.z() >> 4);
+        String ceBlockId = chunkScanner.getCeBlockId(coord, pos);
+        if (ceBlockId != null) {
+            for (Rule rule : activeRules) {
+                String replaceId = rule.changes().get(ceBlockId);
+                if (replaceId != null) {
+                    return BlockResolver.resolve(replaceId);
+                }
+            }
+        }
+
+        // 再按原版 material 匹配
         String blockId = "minecraft:" + originalData.getMaterial().getKey().getKey();
 
         for (Rule rule : activeRules) {
