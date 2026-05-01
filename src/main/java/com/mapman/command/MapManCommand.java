@@ -29,7 +29,7 @@ import java.util.Set;
 public final class MapManCommand implements TabExecutor {
 
     private static final List<String> TOP_CMDS = List.of("reload", "info", "apply", "undo", "rule", "region", "help");
-    private static final List<String> RULE_CMDS = List.of("add", "remove", "list");
+    private static final List<String> RULE_CMDS = List.of("add", "remove", "list", "set");
     private static final List<String> REGION_CMDS = List.of("add", "remove", "list");
     private static final List<String> EMPTY = List.of();
 
@@ -80,6 +80,14 @@ public final class MapManCommand implements TabExecutor {
         if (args.length >= 3 && args[1].equalsIgnoreCase("remove")) {
             return args.length == 3 ? prefixMatch(args[2], ruleIds()) : EMPTY;
         }
+        if (args.length >= 3 && args[1].equalsIgnoreCase("set")) {
+            if (args.length == 3) return prefixMatch(args[2], ruleIds());
+            String last = args[args.length - 1].toLowerCase();
+            if (last.equals("--region")) return prefixMatch("", regionNames());
+            String prev = args.length >= 2 ? args[args.length - 2].toLowerCase() : "";
+            if (prev.equals("--region")) return prefixMatch(last, regionNames());
+            return prefixMatch(last, List.of("--region", "--add-expr", "--add-perm", "--clear-conditions", "--priority"));
+        }
         // rule add: suggest --expr, --perm, --region flags
         if (args.length >= 6 && args[1].equalsIgnoreCase("add")) {
             String last = args[args.length - 1].toLowerCase();
@@ -115,7 +123,8 @@ public final class MapManCommand implements TabExecutor {
         sender.sendMessage(Component.empty());
         sender.sendMessage(Component.text("规则", NamedTextColor.GOLD));
         cmdLine(sender, "/mapman rule list",       "列出所有规则");
-        cmdLine(sender, "/mapman rule add <id> <优先级> <目标方块> <替换方块> [--expr \"...\"] [--perm \"...\"] [--region \"...\"]", "创建规则");
+        cmdLine(sender, "/mapman rule add <id> <优先级> <目标1;目标2|替换1 目标3|替换2 ...> [--expr \"...\"] [--perm \"...\"] [--region \"...\"]", "创建规则");
+        cmdLine(sender, "/mapman rule set <id> --region/--add-expr/--add-perm/--clear-conditions/--priority", "修改规则");
         cmdLine(sender, "/mapman rule remove <id>", "删除规则");
 
         sender.sendMessage(Component.empty());
@@ -341,6 +350,17 @@ public final class MapManCommand implements TabExecutor {
             return true;
         }
 
+        // 构建区域→规则的反向索引
+        Map<String, List<String>> regionRules = new LinkedHashMap<>();
+        for (String rn : rm.getRegionNames()) {
+            regionRules.put(rn, new ArrayList<>());
+        }
+        for (Rule rule : plugin.getRuleRegistry().rules()) {
+            if (rule.regionName() != null && regionRules.containsKey(rule.regionName())) {
+                regionRules.get(rule.regionName()).add(rule.id());
+            }
+        }
+
         sender.sendMessage(Component.text("==== 区域列表 (" + all.size() + ") ====", NamedTextColor.GOLD));
         for (Region r : all) {
             // 找到区域名
@@ -350,11 +370,22 @@ public final class MapManCommand implements TabExecutor {
                     if (rm.getRegion(n) == r) { name = n; break; }
                 }
             }
-            sender.sendMessage(Component.text("  " + (name != null ? name : "?"), NamedTextColor.AQUA)
-                    .append(Component.text("  world=" + r.worldName(), NamedTextColor.GRAY))
-                    .append(Component.text(String.format("  (%d,%d,%d)→(%d,%d,%d)",
-                            r.minX(), r.minY(), r.minZ(), r.maxX(), r.maxY(), r.maxZ()),
-                            NamedTextColor.WHITE)));
+            String displayName = name != null ? name : "?";
+            sender.sendMessage(
+                    Component.text("  " + displayName, NamedTextColor.AQUA)
+                            .append(Component.text("  world=" + r.worldName(), NamedTextColor.GRAY))
+                            .append(Component.text(String.format("  (%d,%d,%d)→(%d,%d,%d)",
+                                    r.minX(), r.minY(), r.minZ(), r.maxX(), r.maxY(), r.maxZ()),
+                                    NamedTextColor.WHITE))
+            );
+
+            // 显示引用此区域的规则
+            List<String> related = regionRules.getOrDefault(displayName, List.of());
+            if (related.isEmpty()) {
+                sender.sendMessage(Component.text("    引用规则: (无)", NamedTextColor.DARK_GRAY));
+            } else {
+                sender.sendMessage(Component.text("    引用规则: " + String.join(", ", related), NamedTextColor.GREEN));
+            }
         }
         sender.sendMessage(Component.text("================================", NamedTextColor.GOLD));
         return true;
@@ -371,16 +402,20 @@ public final class MapManCommand implements TabExecutor {
             case "add"    -> handleRuleAdd(sender, args);
             case "remove" -> handleRuleRemove(sender, args);
             case "list"   -> handleRuleList(sender);
+            case "set"    -> handleRuleSet(sender, args);
             default -> {
-                sender.sendMessage(Component.text("未知子命令: " + args[1] + "。可用: add, remove, list", NamedTextColor.RED));
+                sender.sendMessage(Component.text("未知子命令: " + args[1] + "。可用: add, remove, list, set", NamedTextColor.RED));
                 yield true;
             }
         };
     }
 
     private boolean handleRuleAdd(@NotNull CommandSender sender, String[] args) {
-        if (args.length < 6) {
-            sender.sendMessage(Component.text("用法: /mapman rule add <id> <优先级> <目标方块> <替换方块> [--expr \"...\"] [--perm \"...\"] [--region \"...\"]", NamedTextColor.RED));
+        if (args.length < 5) {
+            sender.sendMessage(Component.text("用法: /mapman rule add <id> <优先级> <目标1;目标2|替换1 目标3|替换2 ...> [--expr \"...\"] [--perm \"...\"] [--region \"...\"]", NamedTextColor.RED));
+            sender.sendMessage(Component.text("  ;  — 分隔多个目标共用一个替换", NamedTextColor.GRAY));
+            sender.sendMessage(Component.text("  |  — 分隔目标组和替换方块", NamedTextColor.GRAY));
+            sender.sendMessage(Component.text("  空格 — 分隔多组 target|replace 映射", NamedTextColor.GRAY));
             return true;
         }
 
@@ -393,14 +428,62 @@ public final class MapManCommand implements TabExecutor {
             return true;
         }
 
-        String targetBlock = args[4];
-        String replaceBlock = args[5];
+        // 收集 changes 参数（从索引 4 直到遇到 --flag）
+        int flagStart = args.length;
+        for (int i = 4; i < args.length; i++) {
+            if (args[i].startsWith("--")) {
+                flagStart = i;
+                break;
+            }
+        }
+
+        StringBuilder changesBuilder = new StringBuilder();
+        for (int i = 4; i < flagStart; i++) {
+            if (i > 4) changesBuilder.append(' ');
+            changesBuilder.append(args[i]);
+        }
+        String changesArg = changesBuilder.toString();
+
+        if (changesArg.isEmpty()) {
+            sender.sendMessage(Component.text("changes 参数不能为空。", NamedTextColor.RED));
+            return true;
+        }
+
+        // 解析 changes: "target1;target2|replace1 target3|replace2"
+        Map<String, String> changes = new LinkedHashMap<>();
+        for (String pair : changesArg.split(" ")) {
+            String trimmed = pair.trim();
+            if (trimmed.isEmpty()) continue;
+            int pipeIdx = trimmed.indexOf('|');
+            if (pipeIdx < 0) {
+                sender.sendMessage(Component.text("格式错误: \"" + trimmed + "\" 缺少 '|'。应为 目标|替换。", NamedTextColor.RED));
+                return true;
+            }
+            String targetsPart = trimmed.substring(0, pipeIdx);
+            String replace = trimmed.substring(pipeIdx + 1);
+            if (targetsPart.isEmpty() || replace.isEmpty()) {
+                sender.sendMessage(Component.text("格式错误: 目标和替换不能为空。", NamedTextColor.RED));
+                return true;
+            }
+
+            for (String target : targetsPart.split(";")) {
+                String t = target.trim();
+                if (!t.isEmpty()) {
+                    changes.put(t, replace);
+                }
+            }
+        }
+
+        if (changes.isEmpty()) {
+            sender.sendMessage(Component.text("未能解析出有效的 changes 映射。", NamedTextColor.RED));
+            return true;
+        }
 
         // 解析可选 flag
         String expr = null;
         String perm = null;
         String regionName = null;
-        for (int i = 6; i < args.length; i++) {
+        for (int i = flagStart; i < args.length; i++) {
             if (args[i].equalsIgnoreCase("--expr") && i + 1 < args.length) {
                 expr = args[++i];
             } else if (args[i].equalsIgnoreCase("--perm") && i + 1 < args.length) {
@@ -439,7 +522,7 @@ public final class MapManCommand implements TabExecutor {
         if (!conditions.isEmpty()) {
             ruleSection.set("conditions", conditions);
         }
-        ruleSection.createSection("changes", Map.of(targetBlock, replaceBlock));
+        ruleSection.createSection("changes", changes);
 
         try {
             config.save(rulesFile);
@@ -459,7 +542,7 @@ public final class MapManCommand implements TabExecutor {
         }
 
         sender.sendMessage(Component.text("规则 " + ruleId + " 已创建并生效。priority=" + priority
-                + ", target=" + targetBlock + " → " + replaceBlock
+                + ", changes=" + changes.size() + "个映射"
                 + (regionName != null ? ", region=" + regionName : "")
                 + (expr != null ? ", expr=" + expr : "")
                 + (perm != null ? ", perm=" + perm : ""), NamedTextColor.GREEN));
@@ -513,15 +596,125 @@ public final class MapManCommand implements TabExecutor {
 
         sender.sendMessage(Component.text("==== 规则列表 (" + rules.size() + ") ====", NamedTextColor.GOLD));
         for (Rule r : rules) {
-            String regionStr = r.regionName() != null ? " region=" + r.regionName() : "";
+            // 条件摘要
+            String condSummary = r.hasCondition() ? " [有条件]" : " [无条件]";
+            String regionStr = r.regionName() != null ? " region=" + r.regionName() : " (全局)";
+
             sender.sendMessage(
                     Component.text("  " + r.id(), NamedTextColor.AQUA)
-                            .append(Component.text("  pri=" + r.priority() + regionStr, NamedTextColor.GRAY))
-                            .append(Component.text("  changes=" + r.changes(), NamedTextColor.WHITE))
+                            .append(Component.text("  pri=" + r.priority(), NamedTextColor.GRAY))
+                            .append(Component.text(regionStr, r.regionName() != null ? NamedTextColor.YELLOW : NamedTextColor.GRAY))
+                            .append(Component.text(condSummary, r.hasCondition() ? NamedTextColor.GREEN : NamedTextColor.DARK_GRAY))
+            );
+            sender.sendMessage(
+                    Component.text("    changes: " + r.changes(), NamedTextColor.WHITE)
             );
         }
-        sender.sendMessage(Component.text("=============================", NamedTextColor.GOLD));
+        sender.sendMessage(Component.text("==============================", NamedTextColor.GOLD));
         return true;
+    }
+
+    private boolean handleRuleSet(@NotNull CommandSender sender, String[] args) {
+        if (args.length < 4) {
+            sender.sendMessage(Component.text("用法: /mapman rule set <id> --region <name> | --add-expr \"...\" | --add-perm <perm> | --clear-conditions | --priority <n>", NamedTextColor.RED));
+            return true;
+        }
+
+        String ruleId = args[2];
+        File rulesFile = new File(plugin.getDataFolder(), "rules.yml");
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(rulesFile);
+        ConfigurationSection rulesSection = config.getConfigurationSection("rules");
+        if (rulesSection == null || !rulesSection.contains(ruleId)) {
+            sender.sendMessage(Component.text("规则不存在: " + ruleId, NamedTextColor.RED));
+            return true;
+        }
+
+        ConfigurationSection ruleSection = rulesSection.getConfigurationSection(ruleId);
+        if (ruleSection == null) {
+            sender.sendMessage(Component.text("规则节点损坏: " + ruleId, NamedTextColor.RED));
+            return true;
+        }
+
+        String flag = args[3].toLowerCase();
+        switch (flag) {
+            case "--region" -> {
+                if (args.length < 5) {
+                    sender.sendMessage(Component.text("用法: /mapman rule set <id> --region <名称>", NamedTextColor.RED));
+                    return true;
+                }
+                ruleSection.set("region", args[4]);
+                sender.sendMessage(Component.text("规则 " + ruleId + " 区域已设为 " + args[4] + "。", NamedTextColor.GREEN));
+            }
+            case "--add-expr" -> {
+                if (args.length < 5) {
+                    sender.sendMessage(Component.text("用法: /mapman rule set <id> --add-expr \"<表达式>\"", NamedTextColor.RED));
+                    return true;
+                }
+                addCondition(ruleSection, "expression", Map.of("type", "expression", "expression", args[4]));
+                sender.sendMessage(Component.text("规则 " + ruleId + " 已添加 expression 条件。", NamedTextColor.GREEN));
+            }
+            case "--add-perm" -> {
+                if (args.length < 5) {
+                    sender.sendMessage(Component.text("用法: /mapman rule set <id> --add-perm <权限>", NamedTextColor.RED));
+                    return true;
+                }
+                addCondition(ruleSection, "permission", Map.of("type", "permission", "permission", args[4]));
+                sender.sendMessage(Component.text("规则 " + ruleId + " 已添加 permission 条件。", NamedTextColor.GREEN));
+            }
+            case "--clear-conditions" -> {
+                ruleSection.set("conditions", null);
+                sender.sendMessage(Component.text("规则 " + ruleId + " 条件已清空。", NamedTextColor.GREEN));
+            }
+            case "--priority" -> {
+                if (args.length < 5) {
+                    sender.sendMessage(Component.text("用法: /mapman rule set <id> --priority <数值>", NamedTextColor.RED));
+                    return true;
+                }
+                try {
+                    ruleSection.set("priority", Integer.parseInt(args[4]));
+                    sender.sendMessage(Component.text("规则 " + ruleId + " 优先级已设为 " + args[4] + "。", NamedTextColor.GREEN));
+                } catch (NumberFormatException e) {
+                    sender.sendMessage(Component.text("优先级必须为整数。", NamedTextColor.RED));
+                    return true;
+                }
+            }
+            default -> {
+                sender.sendMessage(Component.text("未知标志: " + flag + "。可用: --region, --add-expr, --add-perm, --clear-conditions, --priority", NamedTextColor.RED));
+                return true;
+            }
+        }
+
+        try {
+            config.save(rulesFile);
+        } catch (Exception e) {
+            sender.sendMessage(Component.text("写入 rules.yml 失败: " + e.getMessage(), NamedTextColor.RED));
+            return true;
+        }
+
+        plugin.loadRules();
+        BlockApplier applier = plugin.getBlockApplier();
+        if (applier != null) {
+            applier.clearAllCaches();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                applier.undoAll(p);
+                applier.applyForPlayer(p);
+            }
+        }
+
+        return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void addCondition(ConfigurationSection ruleSection, String type, Map<String, Object> newCond) {
+        List<Map<?, ?>> rawList = ruleSection.getMapList("conditions");
+        List<Map<String, Object>> conditions = new ArrayList<>();
+        if (rawList != null) {
+            for (Map<?, ?> raw : rawList) {
+                conditions.add((Map<String, Object>) raw);
+            }
+        }
+        conditions.add(newCond);
+        ruleSection.set("conditions", conditions);
     }
 
     // ========== Helpers ==========

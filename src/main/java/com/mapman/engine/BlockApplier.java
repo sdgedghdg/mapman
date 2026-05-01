@@ -225,10 +225,9 @@ public final class BlockApplier {
         }
     }
 
-    /** 清除所有缓存（reload 时调用） */
+    /** 清除扫描缓存（reload 时调用）。玩家缓存由 undoAll/removeAll 管理 */
     public void clearAllCaches() {
         chunkScanner.clearAll();
-        playerBlockCache.clearAll();
     }
 
     // ========================================================================
@@ -238,6 +237,8 @@ public final class BlockApplier {
     /**
      * 找匹配的替换方块。
      * 优先匹配 CE 自定义方块 ID，再按原版 material 匹配。
+     * 含有方块状态的目标用 BlockData.matches() 精确匹配；
+     * 不含状态的目标仅按 Material 匹配。
      */
     private BlockData findReplacement(Player player, BlockPosition pos,
                                        BlockData originalData, List<Rule> activeRules) {
@@ -254,14 +255,27 @@ public final class BlockApplier {
             }
         }
 
-        // 再按原版 material 匹配
-        String blockId = "minecraft:" + originalData.getMaterial().getKey().getKey();
+        // 原版方块匹配
+        Map<String, BlockData> targetMap = ruleRegistry.targetBlockMap();
+        if (targetMap.isEmpty()) return null;
 
         for (Rule rule : activeRules) {
             if (!matchesRegion(rule, pos)) continue;
-            String replaceId = rule.changes().get(blockId);
-            if (replaceId != null) {
-                return BlockResolver.resolve(replaceId);
+            // 先精确匹配含状态的目标
+            for (String targetId : ruleRegistry.statefulTargetIds()) {
+                if (!rule.changes().containsKey(targetId)) continue;
+                BlockData targetData = targetMap.get(targetId);
+                if (targetData != null && targetData.matches(originalData)) {
+                    return BlockResolver.resolve(rule.changes().get(targetId));
+                }
+            }
+            // 再按 Material 匹配不含状态的目标
+            for (String targetId : rule.targetBlockIds()) {
+                if (BlockResolver.hasState(targetId)) continue; // 已在上面处理
+                BlockData targetData = targetMap.get(targetId);
+                if (targetData != null && targetData.getMaterial() == originalData.getMaterial()) {
+                    return BlockResolver.resolve(rule.changes().get(targetId));
+                }
             }
         }
         return null;

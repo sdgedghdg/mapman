@@ -23,6 +23,8 @@ public final class RuleRegistry {
     private Set<Material> targetMaterials = Collections.emptySet();
     /** 所有规则的目标 CE 方块 ID 集合 */
     private Set<String> targetCustomIds = Collections.emptySet();
+    /** 含状态的目标 ID 集合（需要 BlockData.matches() 精确匹配） */
+    private Set<String> statefulTargetIds = Collections.emptySet();
     /** 玩家 → 当前生效的规则 ID 集合 */
     private final Map<UUID, Set<String>> playerActiveRules = new HashMap<>();
 
@@ -99,6 +101,7 @@ public final class RuleRegistry {
         // 构建目标集合
         Set<Material> mats = new HashSet<>();
         Set<String> customIds = new HashSet<>();
+        Set<String> stateful = new HashSet<>();
         for (String id : targetBlockMap.keySet()) {
             Material mat = BlockResolver.resolveTargetMaterial(id);
             if (mat != null) {
@@ -107,9 +110,13 @@ public final class RuleRegistry {
             if (BlockResolver.isCustomBlockId(id)) {
                 customIds.add(id);
             }
+            if (BlockResolver.hasState(id)) {
+                stateful.add(id);
+            }
         }
         this.targetMaterials = Collections.unmodifiableSet(mats);
         this.targetCustomIds = Collections.unmodifiableSet(customIds);
+        this.statefulTargetIds = Collections.unmodifiableSet(stateful);
 
         loaded = true;
     }
@@ -177,6 +184,12 @@ public final class RuleRegistry {
 
     /** 获取所有目标 CE 方块 ID */
     public Set<String> targetCustomIds() { return targetCustomIds; }
+
+    /** 获取含状态的目标 ID 集合 */
+    public Set<String> statefulTargetIds() { return statefulTargetIds; }
+
+    /** 是否有任何目标包含方块状态 */
+    public boolean hasStatefulTargets() { return !statefulTargetIds.isEmpty(); }
 
     /** 获取某目标 ID 对应的检测用 Material（扫描用） */
     @Nullable

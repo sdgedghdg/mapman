@@ -113,6 +113,7 @@ public final class ChunkScanner {
 
         // 原版方块扫描
         if (!targetMats.isEmpty()) {
+            boolean needsActualState = ruleRegistry.hasStatefulTargets();
             ChunkSnapshot snapshot;
             try {
                 snapshot = chunk.getChunkSnapshot();
@@ -132,7 +133,13 @@ public final class ChunkScanner {
                         if (targetMats.contains(type)) {
                             BlockPosition pos = new BlockPosition(worldX, y, worldZ);
                             if (regionManager.containsAny(targetWorld.getName(), worldX, y, worldZ)) {
-                                result.put(pos, type.createBlockData());
+                                BlockData blockData;
+                                if (needsActualState) {
+                                    blockData = chunk.getBlock(dx, y, dz).getBlockData();
+                                } else {
+                                    blockData = type.createBlockData();
+                                }
+                                result.put(pos, blockData);
                             }
                         }
                     }
