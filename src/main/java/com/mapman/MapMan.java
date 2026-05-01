@@ -104,8 +104,14 @@ public final class MapMan extends JavaPlugin {
 
         // 11. 注册事件和指令
         Bukkit.getPluginManager().registerEvents(new PlayerListener(this), this);
-        Objects.requireNonNull(getCommand("mapman")).setExecutor(new MapManCommand(this));
-        Objects.requireNonNull(getCommand("weather")).setExecutor(new WeatherCommand(this));
+
+        MapManCommand mapManCmd = new MapManCommand(this);
+        Objects.requireNonNull(getCommand("mapman")).setExecutor(mapManCmd);
+        Objects.requireNonNull(getCommand("mapman")).setTabCompleter(mapManCmd);
+
+        WeatherCommand weatherCmd = new WeatherCommand(this);
+        Objects.requireNonNull(getCommand("weather")).setExecutor(weatherCmd);
+        Objects.requireNonNull(getCommand("weather")).setTabCompleter(weatherCmd);
 
         getLogger().info("MapMan 已启用。");
     }

@@ -5,28 +5,28 @@ import com.mapman.WeatherManager.WeatherType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-/**
- * /weather 指令处理器。
- * <p>
- * 语法：
- *   /weather set <clear|rain|snow>  — 设置个人天气（客户端视觉 + 存储）
- *   /weather info                   — 诊断信息
- * <p>
- * 注意：方块替换行为现在由 rules.yml 的条件驱动，
- * 此命令仅控制玩家客户端的天气视觉效果和偏好存储。
- */
-public final class WeatherCommand implements CommandExecutor {
+import java.util.ArrayList;
+import java.util.List;
+
+public final class WeatherCommand implements TabExecutor {
+
+    private static final List<String> TOP_CMDS = List.of("set", "info");
+    private static final List<String> WEATHER_TYPES = List.of("clear", "rain", "snow");
+    private static final List<String> EMPTY = List.of();
 
     private final MapMan plugin;
 
     public WeatherCommand(MapMan plugin) {
         this.plugin = plugin;
     }
+
+    // ========== CommandExecutor ==========
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
@@ -46,6 +46,21 @@ public final class WeatherCommand implements CommandExecutor {
         return true;
     }
 
+    // ========== TabCompleter ==========
+
+    @Override
+    @Nullable
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                      @NotNull String label, @NotNull String[] args) {
+        if (args.length == 1) return prefixMatch(args[0], TOP_CMDS);
+        if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
+            return prefixMatch(args[1], WEATHER_TYPES);
+        }
+        return EMPTY;
+    }
+
+    // ========== Handlers ==========
+
     private boolean handleSet(@NotNull CommandSender sender, @NotNull String typeStr) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("该指令只能由玩家执行。", NamedTextColor.RED));
@@ -60,13 +75,11 @@ public final class WeatherCommand implements CommandExecutor {
             return true;
         }
 
-        // 设置玩家客户端天气视觉效果
         switch (type) {
             case CLEAR -> player.resetPlayerWeather();
             case RAIN, SNOW -> player.setPlayerWeather(org.bukkit.WeatherType.DOWNFALL);
         }
 
-        // 存储偏好
         plugin.getWeatherManager().setPlayerWeather(player, type);
 
         player.sendMessage(
@@ -95,5 +108,16 @@ public final class WeatherCommand implements CommandExecutor {
 
         sender.sendMessage(Component.text("==========================", NamedTextColor.GOLD));
         return true;
+    }
+
+    // ========== Helpers ==========
+
+    private static List<String> prefixMatch(String prefix, List<String> candidates) {
+        String lower = prefix.toLowerCase();
+        List<String> result = new ArrayList<>();
+        for (String c : candidates) {
+            if (c.toLowerCase().startsWith(lower)) result.add(c);
+        }
+        return result;
     }
 }
