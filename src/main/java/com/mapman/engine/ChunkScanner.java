@@ -175,11 +175,11 @@ public final class ChunkScanner {
             for (int dz = 0; dz < 16; dz++) {
                 int worldX = chunkWorldX + dx;
                 int worldZ = chunkWorldZ + dz;
-                if (!bounds.containsHorizontal(worldX, worldZ)) continue;
+                if (!regionManager.containsAny(targetWorld.getName(), worldX, minY + 1, worldZ)) continue;
 
                 for (int y = maxY - 1; y >= minY; y--) {
                     BlockPosition pos = new BlockPosition(worldX, y, worldZ);
-                    if (!region.contains(worldX, y, worldZ)) continue;
+                    if (!regionManager.containsAny(targetWorld.getName(), worldX, y, worldZ)) continue;
                     if (result.containsKey(pos)) continue; // vanilla 已匹配
 
                     try {
