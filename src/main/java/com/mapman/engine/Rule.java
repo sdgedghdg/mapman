@@ -14,18 +14,21 @@ public class Rule {
     private final Object condition; // Condition<Context> 或 null（CE 不可用时恒为 null）
     private final Map<String, String> changes; // target identifier → replace identifier
     private final Set<String> targetBlockIds; // 此规则涉及的所有目标方块 ID
+    private final String regionName; // null = 全局生效
 
     // 玩家已应用的坐标缓存：playerId → applied positions
     // 用于撤销时精确恢复
     private final Map<java.util.UUID, Set<BlockPosition>> appliedBlocks = new java.util.concurrent.ConcurrentHashMap<>();
 
     public Rule(String id, int priority, Object condition,
-                Map<String, String> changes, Set<String> targetBlockIds) {
+                Map<String, String> changes, Set<String> targetBlockIds,
+                String regionName) {
         this.id = id;
         this.priority = priority;
         this.condition = condition;
         this.changes = changes;
         this.targetBlockIds = targetBlockIds;
+        this.regionName = regionName;
     }
 
     public String id() { return id; }
@@ -48,6 +51,9 @@ public class Rule {
     public void clearApplied(java.util.UUID playerId) {
         appliedBlocks.remove(playerId);
     }
+
+    /** 区域名，null 表示全局生效 */
+    public String regionName() { return regionName; }
 
     /** 是否有条件（无条件规则一直生效） */
     public boolean hasCondition() {

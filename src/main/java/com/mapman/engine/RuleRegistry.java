@@ -87,7 +87,9 @@ public final class RuleRegistry {
 
             if (changes.isEmpty()) continue;
 
-            Rule rule = new Rule(ruleId, priority, condition, changes, changes.keySet());
+            String regionName = section.getString("region"); // null = 全局
+
+            Rule rule = new Rule(ruleId, priority, condition, changes, changes.keySet(), regionName);
             rules.add(rule);
         }
 

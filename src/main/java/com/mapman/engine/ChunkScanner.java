@@ -2,6 +2,7 @@ package com.mapman.engine;
 
 import com.mapman.BlockPosition;
 import com.mapman.Region;
+import com.mapman.RegionManager;
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks;
 import net.momirealms.craftengine.bukkit.plugin.BukkitCraftEngine;
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils;
@@ -34,7 +35,7 @@ public final class ChunkScanner {
     private final Map<ChunkCoord, Map<BlockPosition, String>> ceBlockIdCache = new ConcurrentHashMap<>();
 
     private final RuleRegistry ruleRegistry;
-    private final Region region;
+    private final RegionManager regionManager;
     private final World targetWorld;
 
     public record ChunkCoord(int x, int z) {
@@ -43,9 +44,9 @@ public final class ChunkScanner {
         }
     }
 
-    public ChunkScanner(RuleRegistry ruleRegistry, Region region, World targetWorld) {
+    public ChunkScanner(RuleRegistry ruleRegistry, RegionManager regionManager, World targetWorld) {
         this.ruleRegistry = ruleRegistry;
-        this.region = region;
+        this.regionManager = regionManager;
         this.targetWorld = targetWorld;
     }
 
@@ -95,17 +96,19 @@ public final class ChunkScanner {
 
         if (!chunk.getWorld().equals(targetWorld)) return Collections.emptyMap();
 
-        // AABB 检测
+        // AABB 检测：用所有区域的并集
         int chunkWorldX = coord.x() << 4;
         int chunkWorldZ = coord.z() << 4;
-        if (chunkWorldX + 15 < region.minX() || chunkWorldX > region.maxX()
-                || chunkWorldZ + 15 < region.minZ() || chunkWorldZ > region.maxZ()) {
+        Region bounds = regionManager.getOverallBounds(targetWorld.getName());
+        if (bounds == null) return Collections.emptyMap();
+        if (chunkWorldX + 15 < bounds.minX() || chunkWorldX > bounds.maxX()
+                || chunkWorldZ + 15 < bounds.minZ() || chunkWorldZ > bounds.maxZ()) {
             return Collections.emptyMap();
         }
 
         Set<Material> targetMats = ruleRegistry.targetMaterials();
-        int minY = region.minY();
-        int maxY = region.maxY();
+        int minY = bounds.minY();
+        int maxY = bounds.maxY();
         Map<BlockPosition, BlockData> result = new HashMap<>();
 
         // 原版方块扫描
@@ -121,14 +124,14 @@ public final class ChunkScanner {
                 for (int dz = 0; dz < 16; dz++) {
                     int worldX = chunkWorldX + dx;
                     int worldZ = chunkWorldZ + dz;
-                    if (!region.containsHorizontal(worldX, worldZ)) continue;
+                    if (!bounds.containsHorizontal(worldX, worldZ)) continue;
 
                     for (int y = maxY - 1; y >= minY; y--) {
                         Material type = snapshot.getBlockType(dx, y, dz);
                         if (type == Material.AIR) continue;
                         if (targetMats.contains(type)) {
                             BlockPosition pos = new BlockPosition(worldX, y, worldZ);
-                            if (region.contains(worldX, y, worldZ)) {
+                            if (regionManager.containsAny(targetWorld.getName(), worldX, y, worldZ)) {
                                 result.put(pos, type.createBlockData());
                             }
                         }
@@ -172,7 +175,7 @@ public final class ChunkScanner {
             for (int dz = 0; dz < 16; dz++) {
                 int worldX = chunkWorldX + dx;
                 int worldZ = chunkWorldZ + dz;
-                if (!region.containsHorizontal(worldX, worldZ)) continue;
+                if (!bounds.containsHorizontal(worldX, worldZ)) continue;
 
                 for (int y = maxY - 1; y >= minY; y--) {
                     BlockPosition pos = new BlockPosition(worldX, y, worldZ);

@@ -1,7 +1,5 @@
 package com.mapman;
 
-import org.bukkit.configuration.ConfigurationSection;
-
 /**
  * 轴对齐包围盒（AABB），用于限定伪装生效区域。
  * 不可变，线程安全。
@@ -20,17 +18,6 @@ public final class Region {
         this.maxX = Math.max(x1, x2);
         this.maxY = Math.max(y1, y2);
         this.maxZ = Math.max(z1, z2);
-    }
-
-    public static Region fromConfig(ConfigurationSection section) {
-        String world = section.getString("world", "world");
-        int x1 = section.getInt("pos1.x", -100);
-        int y1 = section.getInt("pos1.y", -64);
-        int z1 = section.getInt("pos1.z", -100);
-        int x2 = section.getInt("pos2.x", 100);
-        int y2 = section.getInt("pos2.y", 320);
-        int z2 = section.getInt("pos2.z", 100);
-        return new Region(world, x1, y1, z1, x2, y2, z2);
     }
 
     public String worldName() {

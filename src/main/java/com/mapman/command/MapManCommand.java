@@ -2,6 +2,7 @@ package com.mapman.command;
 
 import com.mapman.MapMan;
 import com.mapman.Region;
+import com.mapman.RegionManager;
 import com.mapman.engine.BlockApplier;
 import com.mapman.engine.Rule;
 import net.kyori.adventure.text.Component;
@@ -19,6 +20,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +28,9 @@ import java.util.Set;
 
 public final class MapManCommand implements TabExecutor {
 
-    private static final List<String> TOP_CMDS = List.of("reload", "info", "apply", "undo", "rule", "help");
+    private static final List<String> TOP_CMDS = List.of("reload", "info", "apply", "undo", "rule", "region", "help");
     private static final List<String> RULE_CMDS = List.of("add", "remove", "list");
+    private static final List<String> REGION_CMDS = List.of("add", "remove", "list");
     private static final List<String> EMPTY = List.of();
 
     private final MapMan plugin;
@@ -44,13 +47,14 @@ public final class MapManCommand implements TabExecutor {
         if (args.length == 0) return showHelp(sender);
 
         return switch (args[0].toLowerCase()) {
-            case "reload" -> handleReload(sender);
-            case "info"   -> handleInfo(sender);
-            case "apply"  -> handleApply(sender);
-            case "undo"   -> handleUndo(sender);
-            case "rule"   -> handleRule(sender, args);
-            case "help"   -> showHelp(sender);
-            default       -> showHelp(sender);
+            case "reload"  -> handleReload(sender);
+            case "info"    -> handleInfo(sender);
+            case "apply"   -> handleApply(sender);
+            case "undo"    -> handleUndo(sender);
+            case "rule"    -> handleRule(sender, args);
+            case "region"  -> handleRegion(sender, args);
+            case "help"    -> showHelp(sender);
+            default        -> showHelp(sender);
         };
     }
 
@@ -60,17 +64,38 @@ public final class MapManCommand implements TabExecutor {
     @Nullable
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String label, @NotNull String[] args) {
-        if (args.length == 0) return TOP_CMDS;
         if (args.length == 1) return prefixMatch(args[0], TOP_CMDS);
+
         if (args.length >= 2 && args[0].equalsIgnoreCase("rule")) {
-            return switch (args[1].toLowerCase()) {
-                case "add", "remove" -> args.length == 2 ? RULE_CMDS
-                        : args.length == 3 && args[1].equalsIgnoreCase("remove")
-                            ? prefixMatch(args[2], ruleIds())
-                            : EMPTY;
-                case "list" -> EMPTY;
-                default -> prefixMatch(args[1], RULE_CMDS);
-            };
+            return tabRule(args);
+        }
+        if (args.length >= 2 && args[0].equalsIgnoreCase("region")) {
+            return tabRegion(args);
+        }
+        return EMPTY;
+    }
+
+    private List<String> tabRule(String[] args) {
+        if (args.length == 2) return prefixMatch(args[1], RULE_CMDS);
+        if (args.length >= 3 && args[1].equalsIgnoreCase("remove")) {
+            return args.length == 3 ? prefixMatch(args[2], ruleIds()) : EMPTY;
+        }
+        // rule add: suggest --expr, --perm, --region flags
+        if (args.length >= 6 && args[1].equalsIgnoreCase("add")) {
+            String last = args[args.length - 1].toLowerCase();
+            if (last.equals("--region")) return prefixMatch("", regionNames());
+            String prev = args.length >= 2 ? args[args.length - 2].toLowerCase() : "";
+            if (prev.equals("--region")) return prefixMatch(last, regionNames());
+            return prefixMatch(args[args.length - 1],
+                    List.of("--expr", "--perm", "--region"));
+        }
+        return EMPTY;
+    }
+
+    private List<String> tabRegion(String[] args) {
+        if (args.length == 2) return prefixMatch(args[1], REGION_CMDS);
+        if (args.length >= 3 && args[1].equalsIgnoreCase("remove")) {
+            return args.length == 3 ? prefixMatch(args[2], regionNames()) : EMPTY;
         }
         return EMPTY;
     }
@@ -90,8 +115,14 @@ public final class MapManCommand implements TabExecutor {
         sender.sendMessage(Component.empty());
         sender.sendMessage(Component.text("规则", NamedTextColor.GOLD));
         cmdLine(sender, "/mapman rule list",       "列出所有规则");
-        cmdLine(sender, "/mapman rule add <id> <优先级> <目标方块> <替换方块> [--expr \"...\"] [--perm \"...\"]", "创建规则");
+        cmdLine(sender, "/mapman rule add <id> <优先级> <目标方块> <替换方块> [--expr \"...\"] [--perm \"...\"] [--region \"...\"]", "创建规则");
         cmdLine(sender, "/mapman rule remove <id>", "删除规则");
+
+        sender.sendMessage(Component.empty());
+        sender.sendMessage(Component.text("区域", NamedTextColor.GOLD));
+        cmdLine(sender, "/mapman region list",      "列出所有区域");
+        cmdLine(sender, "/mapman region add <名称> <世界> <x1> <y1> <z1> <x2> <y2> <z2>", "添加区域");
+        cmdLine(sender, "/mapman region remove <名称>", "删除区域");
 
         sender.sendMessage(Component.empty());
         sender.sendMessage(Component.text("天气", NamedTextColor.GOLD));
@@ -128,19 +159,22 @@ public final class MapManCommand implements TabExecutor {
     }
 
     private boolean handleInfo(@NotNull CommandSender sender) {
-        Region region = plugin.getRegion();
-        if (region == null) {
-            sender.sendMessage(Component.text("区域未配置。", NamedTextColor.RED));
+        RegionManager rm = plugin.getRegionManager();
+        Collection<Region> allRegions = rm.getAllRegions();
+        if (allRegions.isEmpty()) {
+            sender.sendMessage(Component.text("未配置任何区域。", NamedTextColor.RED));
             return true;
         }
 
         sender.sendMessage(Component.text("==== MapMan 诊断 ====", NamedTextColor.GOLD));
-        sender.sendMessage(Component.text("区域世界: ", NamedTextColor.AQUA)
-                .append(Component.text(region.worldName(), NamedTextColor.WHITE)));
-        sender.sendMessage(Component.text("区域范围: ", NamedTextColor.AQUA)
-                .append(Component.text(String.format("(%d,%d,%d) → (%d,%d,%d)",
-                        region.minX(), region.minY(), region.minZ(),
-                        region.maxX(), region.maxY(), region.maxZ()), NamedTextColor.WHITE)));
+
+        // 区域信息
+        sender.sendMessage(Component.text("已配置区域 (" + allRegions.size() + "):", NamedTextColor.AQUA));
+        for (Region r : allRegions) {
+            sender.sendMessage(Component.text(String.format("  %s: (%d,%d,%d) → (%d,%d,%d)",
+                    r.worldName(), r.minX(), r.minY(), r.minZ(), r.maxX(), r.maxY(), r.maxZ()),
+                    NamedTextColor.WHITE));
+        }
 
         BlockApplier applier = plugin.getBlockApplier();
         if (applier != null) {
@@ -171,10 +205,12 @@ public final class MapManCommand implements TabExecutor {
                     .append(Component.text(String.format("(%d, %d)", cx, cz), NamedTextColor.WHITE)));
             sender.sendMessage(Component.text("视距: ", NamedTextColor.AQUA)
                     .append(Component.text(plugin.getViewDistance() + " Chunk", NamedTextColor.WHITE)));
-            boolean worldMatch = player.getWorld().getName().equals(region.worldName());
-            sender.sendMessage(Component.text("世界匹配区域: ", NamedTextColor.AQUA)
-                    .append(Component.text(worldMatch ? "是" : "否",
-                            worldMatch ? NamedTextColor.GREEN : NamedTextColor.RED)));
+
+            String regionName = rm.getRegionNameAt(player.getWorld().getName(),
+                    player.getLocation().getBlockX(), player.getLocation().getBlockY(),
+                    player.getLocation().getBlockZ());
+            sender.sendMessage(Component.text("所在区域: ", NamedTextColor.AQUA)
+                    .append(Component.text(regionName != null ? regionName : "无", NamedTextColor.WHITE)));
         }
 
         sender.sendMessage(Component.text("====================", NamedTextColor.GOLD));
@@ -208,6 +244,122 @@ public final class MapManCommand implements TabExecutor {
         return true;
     }
 
+    // ========== Region Management ==========
+
+    private boolean handleRegion(@NotNull CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("用法: /mapman region <add|remove|list> ...", NamedTextColor.RED));
+            return true;
+        }
+        return switch (args[1].toLowerCase()) {
+            case "add"    -> handleRegionAdd(sender, args);
+            case "remove" -> handleRegionRemove(sender, args);
+            case "list"   -> handleRegionList(sender);
+            default -> {
+                sender.sendMessage(Component.text("未知子命令: " + args[1] + "。可用: add, remove, list", NamedTextColor.RED));
+                yield true;
+            }
+        };
+    }
+
+    private boolean handleRegionAdd(@NotNull CommandSender sender, String[] args) {
+        if (args.length < 10) {
+            sender.sendMessage(Component.text("用法: /mapman region add <名称> <世界> <x1> <y1> <z1> <x2> <y2> <z2>", NamedTextColor.RED));
+            return true;
+        }
+
+        String name = args[2];
+        String world = args[3];
+        int x1, y1, z1, x2, y2, z2;
+        try {
+            x1 = Integer.parseInt(args[4]);
+            y1 = Integer.parseInt(args[5]);
+            z1 = Integer.parseInt(args[6]);
+            x2 = Integer.parseInt(args[7]);
+            y2 = Integer.parseInt(args[8]);
+            z2 = Integer.parseInt(args[9]);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Component.text("坐标必须为整数。", NamedTextColor.RED));
+            return true;
+        }
+
+        Region region = new Region(world, x1, y1, z1, x2, y2, z2);
+        plugin.getRegionManager().addRegion(name, region);
+        plugin.getRegionManager().save(new File(plugin.getDataFolder(), "config.yml"));
+
+        // 如果新增区域的 world 与 target world 相同，做一次重载让扫描器感知
+        plugin.loadRules();
+        BlockApplier applier = plugin.getBlockApplier();
+        if (applier != null) {
+            applier.clearAllCaches();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                applier.undoAll(p);
+                applier.applyForPlayer(p);
+            }
+        }
+
+        sender.sendMessage(Component.text("区域 " + name + " 已添加: " + world
+                + " (" + x1 + "," + y1 + "," + z1 + ") → (" + x2 + "," + y2 + "," + z2 + ")",
+                NamedTextColor.GREEN));
+        return true;
+    }
+
+    private boolean handleRegionRemove(@NotNull CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Component.text("用法: /mapman region remove <名称>", NamedTextColor.RED));
+            return true;
+        }
+
+        String name = args[2];
+        if (plugin.getRegionManager().getRegion(name) == null) {
+            sender.sendMessage(Component.text("区域不存在: " + name, NamedTextColor.RED));
+            return true;
+        }
+
+        plugin.getRegionManager().removeRegion(name);
+        plugin.getRegionManager().save(new File(plugin.getDataFolder(), "config.yml"));
+
+        plugin.loadRules();
+        BlockApplier applier = plugin.getBlockApplier();
+        if (applier != null) {
+            applier.clearAllCaches();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                applier.undoAll(p);
+                applier.applyForPlayer(p);
+            }
+        }
+
+        sender.sendMessage(Component.text("区域 " + name + " 已删除。", NamedTextColor.GREEN));
+        return true;
+    }
+
+    private boolean handleRegionList(@NotNull CommandSender sender) {
+        RegionManager rm = plugin.getRegionManager();
+        Collection<Region> all = rm.getAllRegions();
+        if (all.isEmpty()) {
+            sender.sendMessage(Component.text("没有已配置的区域。", NamedTextColor.GRAY));
+            return true;
+        }
+
+        sender.sendMessage(Component.text("==== 区域列表 (" + all.size() + ") ====", NamedTextColor.GOLD));
+        for (Region r : all) {
+            // 找到区域名
+            String name = rm.getRegionNameAt(r.worldName(), r.minX(), r.minY(), r.minZ());
+            if (name == null) {
+                for (String n : rm.getRegionNames()) {
+                    if (rm.getRegion(n) == r) { name = n; break; }
+                }
+            }
+            sender.sendMessage(Component.text("  " + (name != null ? name : "?"), NamedTextColor.AQUA)
+                    .append(Component.text("  world=" + r.worldName(), NamedTextColor.GRAY))
+                    .append(Component.text(String.format("  (%d,%d,%d)→(%d,%d,%d)",
+                            r.minX(), r.minY(), r.minZ(), r.maxX(), r.maxY(), r.maxZ()),
+                            NamedTextColor.WHITE)));
+        }
+        sender.sendMessage(Component.text("================================", NamedTextColor.GOLD));
+        return true;
+    }
+
     // ========== Rule Management ==========
 
     private boolean handleRule(@NotNull CommandSender sender, String[] args) {
@@ -226,10 +378,9 @@ public final class MapManCommand implements TabExecutor {
         };
     }
 
-    @SuppressWarnings("unchecked")
     private boolean handleRuleAdd(@NotNull CommandSender sender, String[] args) {
         if (args.length < 6) {
-            sender.sendMessage(Component.text("用法: /mapman rule add <id> <优先级> <目标方块> <替换方块> [--expr \"...\"] [--perm \"...\"]", NamedTextColor.RED));
+            sender.sendMessage(Component.text("用法: /mapman rule add <id> <优先级> <目标方块> <替换方块> [--expr \"...\"] [--perm \"...\"] [--region \"...\"]", NamedTextColor.RED));
             return true;
         }
 
@@ -245,18 +396,20 @@ public final class MapManCommand implements TabExecutor {
         String targetBlock = args[4];
         String replaceBlock = args[5];
 
-        // 解析可选条件 flag
+        // 解析可选 flag
         String expr = null;
         String perm = null;
+        String regionName = null;
         for (int i = 6; i < args.length; i++) {
             if (args[i].equalsIgnoreCase("--expr") && i + 1 < args.length) {
                 expr = args[++i];
             } else if (args[i].equalsIgnoreCase("--perm") && i + 1 < args.length) {
                 perm = args[++i];
+            } else if (args[i].equalsIgnoreCase("--region") && i + 1 < args.length) {
+                regionName = args[++i];
             }
         }
 
-        // 读取 rules.yml
         File rulesFile = new File(plugin.getDataFolder(), "rules.yml");
         YamlConfiguration config = YamlConfiguration.loadConfiguration(rulesFile);
         ConfigurationSection rulesSection = config.getConfigurationSection("rules");
@@ -264,7 +417,6 @@ public final class MapManCommand implements TabExecutor {
             rulesSection = config.createSection("rules");
         }
 
-        // 构建条件列表
         List<Map<String, Object>> conditions = new ArrayList<>();
         if (expr != null) {
             Map<String, Object> cond = new LinkedHashMap<>();
@@ -279,9 +431,11 @@ public final class MapManCommand implements TabExecutor {
             conditions.add(cond);
         }
 
-        // 写入
         ConfigurationSection ruleSection = rulesSection.createSection(ruleId);
         ruleSection.set("priority", priority);
+        if (regionName != null) {
+            ruleSection.set("region", regionName);
+        }
         if (!conditions.isEmpty()) {
             ruleSection.set("conditions", conditions);
         }
@@ -294,7 +448,6 @@ public final class MapManCommand implements TabExecutor {
             return true;
         }
 
-        // 重载
         plugin.loadRules();
         BlockApplier applier = plugin.getBlockApplier();
         if (applier != null) {
@@ -307,6 +460,7 @@ public final class MapManCommand implements TabExecutor {
 
         sender.sendMessage(Component.text("规则 " + ruleId + " 已创建并生效。priority=" + priority
                 + ", target=" + targetBlock + " → " + replaceBlock
+                + (regionName != null ? ", region=" + regionName : "")
                 + (expr != null ? ", expr=" + expr : "")
                 + (perm != null ? ", perm=" + perm : ""), NamedTextColor.GREEN));
         return true;
@@ -336,7 +490,6 @@ public final class MapManCommand implements TabExecutor {
             return true;
         }
 
-        // 重载
         plugin.loadRules();
         BlockApplier applier = plugin.getBlockApplier();
         if (applier != null) {
@@ -360,9 +513,10 @@ public final class MapManCommand implements TabExecutor {
 
         sender.sendMessage(Component.text("==== 规则列表 (" + rules.size() + ") ====", NamedTextColor.GOLD));
         for (Rule r : rules) {
+            String regionStr = r.regionName() != null ? " region=" + r.regionName() : "";
             sender.sendMessage(
                     Component.text("  " + r.id(), NamedTextColor.AQUA)
-                            .append(Component.text("  pri=" + r.priority(), NamedTextColor.GRAY))
+                            .append(Component.text("  pri=" + r.priority() + regionStr, NamedTextColor.GRAY))
                             .append(Component.text("  changes=" + r.changes(), NamedTextColor.WHITE))
             );
         }
@@ -374,10 +528,12 @@ public final class MapManCommand implements TabExecutor {
 
     private List<String> ruleIds() {
         List<String> ids = new ArrayList<>();
-        for (Rule r : plugin.getRuleRegistry().rules()) {
-            ids.add(r.id());
-        }
+        for (Rule r : plugin.getRuleRegistry().rules()) ids.add(r.id());
         return ids;
+    }
+
+    private List<String> regionNames() {
+        return new ArrayList<>(plugin.getRegionManager().getRegionNames());
     }
 
     private static List<String> prefixMatch(String prefix, List<String> candidates) {

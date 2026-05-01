@@ -4,6 +4,7 @@
 #
 # 每条规则包含：
 #   priority    — 优先级（越高越优先匹配）
+#   region      — 可选，指定生效区域名称（不填则全局生效）
 #   conditions  — 条件列表，所有条件必须同时满足（AND 语义）
 #   changes     — target:replace 映射
 #
@@ -110,6 +111,13 @@ rules:
         expression: "<papi:storm>"
     changes:
       minecraft:water: minecraft:ice
+
+  # 限定区域的规则（region 对应 config.yml 中 regions 的 key）
+  # spawn_ice:
+  #   priority: 200
+  #   region: spawn
+  #   changes:
+  #     minecraft:water: minecraft:packed_ice
 
   # ———— 更多示例（取消注释即可启用） ————
 

@@ -37,7 +37,7 @@ public final class MapMan extends JavaPlugin {
     private WeatherManager weatherManager;
     private RuleRegistry ruleRegistry;
     private BlockApplier blockApplier;
-    private Region region;
+    private RegionManager regionManager;
     private int viewDistance;
 
     // ========================================================================
@@ -57,11 +57,19 @@ public final class MapMan extends JavaPlugin {
             getLogger().warning("CE 自定义方块目标也无法解析。插件仅支持原版方块替换。");
         }
 
-        // 1. 加载区域
-        this.region = Region.fromConfig(getConfig().getConfigurationSection("region"));
+        // 1. 加载区域管理器（处理旧格式迁移）
+        this.regionManager = new RegionManager(this);
+        regionManager.load(new File(getDataFolder(), "config.yml"));
 
-        // 2. 获取目标世界
-        String worldName = region.worldName();
+        // 2. 获取目标世界（使用默认区域的世界，兼容旧配置）
+        Region defaultRegion = regionManager.getRegion("default");
+        if (defaultRegion == null && regionManager.getAllRegions().isEmpty()) {
+            getLogger().severe("未配置任何区域！请在 config.yml 中配置 regions 节点。");
+            Bukkit.getPluginManager().disablePlugin(this);
+            return;
+        }
+        String worldName = defaultRegion != null ? defaultRegion.worldName()
+                : regionManager.getAllRegions().iterator().next().worldName();
         World targetWorld = Bukkit.getWorld(worldName);
         if (targetWorld == null) {
             getLogger().severe("目标世界 \"" + worldName + "\" 不存在！插件将禁用。");
@@ -80,7 +88,7 @@ public final class MapMan extends JavaPlugin {
 
         // 5. 初始化各管理器
         this.weatherManager = new WeatherManager(this);
-        this.blockApplier = new BlockApplier(this, ruleRegistry, region, targetWorld, viewDistance, maxPerTick);
+        this.blockApplier = new BlockApplier(this, ruleRegistry, regionManager, targetWorld, viewDistance, maxPerTick);
 
         // 6. 加载玩家数据
         weatherManager.load();
@@ -148,8 +156,7 @@ public final class MapMan extends JavaPlugin {
 
     /** 重新加载区域配置 */
     public void reloadRegion() {
-        reloadConfig();
-        this.region = Region.fromConfig(getConfig().getConfigurationSection("region"));
+        regionManager.reload(new File(getDataFolder(), "config.yml"));
     }
 
     // ========================================================================
@@ -162,7 +169,11 @@ public final class MapMan extends JavaPlugin {
     public WeatherManager getWeatherManager() { return weatherManager; }
     public RuleRegistry getRuleRegistry() { return ruleRegistry; }
     public BlockApplier getBlockApplier() { return blockApplier; }
-    public Region getRegion() { return region; }
+    public RegionManager getRegionManager() { return regionManager; }
+
+    /** @deprecated 使用 getRegionManager() */
+    @Deprecated
+    public Region getRegion() { return regionManager.getRegion("default"); }
     public int getViewDistance() { return viewDistance; }
 
     /** @deprecated 旧版 API 兼容，返回 blockApplier 的 changeQueue */

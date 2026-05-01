@@ -1,7 +1,7 @@
 package com.mapman.engine;
 
 import com.mapman.BlockPosition;
-import com.mapman.Region;
+import com.mapman.RegionManager;
 import com.mapman.engine.ChunkScanner.ChunkCoord;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -23,18 +23,18 @@ public final class BlockApplier {
     private final ChunkScanner chunkScanner;
     private final PlayerBlockCache playerBlockCache;
     private final ChangeQueue changeQueue;
-    private final Region region;
+    private final RegionManager regionManager;
     private final World targetWorld;
     private final int viewDistance;
 
-    public BlockApplier(JavaPlugin plugin, RuleRegistry ruleRegistry, Region region,
+    public BlockApplier(JavaPlugin plugin, RuleRegistry ruleRegistry, RegionManager regionManager,
                         World targetWorld, int viewDistance, int maxPerTick) {
         this.plugin = plugin;
         this.ruleRegistry = ruleRegistry;
-        this.region = region;
+        this.regionManager = regionManager;
         this.targetWorld = targetWorld;
         this.viewDistance = viewDistance;
-        this.chunkScanner = new ChunkScanner(ruleRegistry, region, targetWorld);
+        this.chunkScanner = new ChunkScanner(ruleRegistry, regionManager, targetWorld);
         this.playerBlockCache = new PlayerBlockCache();
         this.changeQueue = new ChangeQueue(plugin, maxPerTick);
     }
@@ -246,6 +246,7 @@ public final class BlockApplier {
         String ceBlockId = chunkScanner.getCeBlockId(coord, pos);
         if (ceBlockId != null) {
             for (Rule rule : activeRules) {
+                if (!matchesRegion(rule, pos)) continue;
                 String replaceId = rule.changes().get(ceBlockId);
                 if (replaceId != null) {
                     return BlockResolver.resolve(replaceId);
@@ -257,12 +258,23 @@ public final class BlockApplier {
         String blockId = "minecraft:" + originalData.getMaterial().getKey().getKey();
 
         for (Rule rule : activeRules) {
+            if (!matchesRegion(rule, pos)) continue;
             String replaceId = rule.changes().get(blockId);
             if (replaceId != null) {
                 return BlockResolver.resolve(replaceId);
             }
         }
         return null;
+    }
+
+    /** 检查规则区域是否匹配坐标 */
+    private boolean matchesRegion(Rule rule, BlockPosition pos) {
+        String rn = rule.regionName();
+        if (rn == null) return true; // 全局规则
+        RegionManager rm = this.regionManager;
+        com.mapman.Region region = rm.getRegion(rn);
+        if (region == null) return true; // 区域不存在时视为全局
+        return region.contains(pos.x(), pos.y(), pos.z());
     }
 
     /** 预热缓存 */
